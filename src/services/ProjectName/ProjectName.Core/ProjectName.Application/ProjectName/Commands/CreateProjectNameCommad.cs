@@ -1,5 +1,5 @@
 using BuildingBlocks.CQRS;
-using BuildingBlocks.Result;
+using BuildingBlocks.Results;
 using ProjectName.Application.ProjectName.Common;
 
 namespace ProjectName.Application.ProjectName.Commands;

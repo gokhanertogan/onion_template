@@ -1,5 +1,5 @@
 using BuildingBlocks.CQRS;
-using BuildingBlocks.Result;
+using BuildingBlocks.Results;
 using Mapster;
 using ProjectName.Application.ProjectName.Common;
 using ProjectName.Application.ProjectName.Repositories;
@@ -11,8 +11,11 @@ public class GetProjectNameHandler(IProjectNameReadRepository projectNameReadRep
 
     public async Task<PaginatedResult<ProjectNameResult>> Handle(GetProjectNameQuery request, CancellationToken cancellationToken)
     {
-        var totalItemCount = await _projectNameReadRepository.CountAsync(cancellationToken);
-        var items = await _projectNameReadRepository.GetAllPaginatedAsync(request.PaginationRequest, cancellationToken);
+        var totalItemCount = await _projectNameReadRepository.CountAsync(cancellationToken, x => x.Name == request.Name);
+        var items = await _projectNameReadRepository.GetWherePaginatedAsync(x => x.Name == request.Name,
+                                                                            request.PaginationRequest.PageIndex,
+                                                                            request.PaginationRequest.PageSize,
+                                                                            cancellationToken);
 
         return PaginatedResult<ProjectNameResult>.Success(data: items.Adapt<List<ProjectNameResult>>(),
                                                           totalCount: totalItemCount,

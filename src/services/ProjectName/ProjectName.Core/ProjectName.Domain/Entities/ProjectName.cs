@@ -1,4 +1,4 @@
-using ProjectName.Domain.Common;
+using SharedKernel.Entities;
 
 namespace ProjectName.Domain.Entities;
 

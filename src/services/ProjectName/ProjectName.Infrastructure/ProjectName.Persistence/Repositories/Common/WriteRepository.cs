@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using ProjectName.Application.Common.Interfaces.Persistence;
-using ProjectName.Domain.Common;
 using ProjectName.Persistence.Contexts;
+using SharedKernel.Entities;
+using SharedKernel.Interfaces.Repositories;
 
 namespace ProjectName.Persistence.Repositories.Common;
 

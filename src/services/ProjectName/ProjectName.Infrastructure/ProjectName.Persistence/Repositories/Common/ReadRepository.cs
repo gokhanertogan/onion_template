@@ -1,9 +1,8 @@
 using System.Linq.Expressions;
-using BuildingBlocks.Result;
 using Microsoft.EntityFrameworkCore;
-using ProjectName.Application.Common.Interfaces.Persistence;
-using ProjectName.Domain.Common;
 using ProjectName.Persistence.Contexts;
+using SharedKernel.Entities;
+using SharedKernel.Interfaces.Repositories;
 
 namespace ProjectName.Persistence.Repositories.Common;
 
@@ -38,10 +37,10 @@ public class ReadRepository<T, TId>(ApplicationDbContext context) : IReadReposit
         return await query.ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<T>> GetAllPaginatedAsync(PaginationRequest paginationRequest, CancellationToken cancellationToken, bool tracking = true)
+    public async Task<IEnumerable<T>> GetAllPaginatedAsync(int pageIndex, int pageSize, CancellationToken cancellationToken, bool tracking = true)
     {
         var query = GetAll(tracking);
-        query = query.Skip(paginationRequest.PageSize * paginationRequest.PageIndex).Take(paginationRequest.PageSize);
+        query = query.Skip(pageSize * pageIndex).Take(pageSize);
         return await query.ToListAsync(cancellationToken);
     }
 
@@ -83,13 +82,13 @@ public class ReadRepository<T, TId>(ApplicationDbContext context) : IReadReposit
         return query;
     }
 
-    public async Task<IEnumerable<T>> GetWhereAsync(Expression<Func<T, bool>> method, CancellationToken cancellationToken,  bool tracking = true)
+    public async Task<IEnumerable<T>> GetWhereAsync(Expression<Func<T, bool>> method, CancellationToken cancellationToken, bool tracking = true)
     {
         return await GetWhere(method, tracking).ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<T>> GetWherePaginatedAsync(Expression<Func<T, bool>> method, PaginationRequest paginationRequest, CancellationToken cancellationToken, bool tracking = true)
+    public async Task<IEnumerable<T>> GetWherePaginatedAsync(Expression<Func<T, bool>> method, int pageIndex, int pageSize, CancellationToken cancellationToken, bool tracking = true)
     {
-        return await GetWhere(method, tracking).Skip(paginationRequest.PageSize * paginationRequest.PageIndex).Take(paginationRequest.PageSize).ToListAsync(cancellationToken);
+        return await GetWhere(method, tracking).Skip(pageSize * pageIndex).Take(pageSize).ToListAsync(cancellationToken);
     }
 }

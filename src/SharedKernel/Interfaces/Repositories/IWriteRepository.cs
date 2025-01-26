@@ -1,7 +1,6 @@
-using System.Linq.Expressions;
-using ProjectName.Domain.Common;
+using SharedKernel.Entities;
 
-namespace ProjectName.Application.Common.Interfaces.Persistence;
+namespace SharedKernel.Interfaces.Repositories;
 
 public interface IWriteRepository<T, TId> : IRepository<T, TId> where T : IEntity<TId>
 {

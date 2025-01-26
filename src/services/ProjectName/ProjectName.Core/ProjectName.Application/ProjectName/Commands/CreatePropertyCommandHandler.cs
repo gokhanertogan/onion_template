@@ -1,7 +1,6 @@
 using BuildingBlocks.CQRS;
-using BuildingBlocks.Result;
+using BuildingBlocks.Results;
 using Mapster;
-using MediatR;
 using ProjectName.Application.ProjectName.Common;
 using ProjectName.Application.ProjectName.Repositories;
 

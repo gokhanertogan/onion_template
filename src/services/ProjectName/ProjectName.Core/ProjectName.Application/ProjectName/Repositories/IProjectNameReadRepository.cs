@@ -1,4 +1,4 @@
-using ProjectName.Application.Common.Interfaces.Persistence;
+using SharedKernel.Interfaces.Repositories;
 
 namespace ProjectName.Application.ProjectName.Repositories;
 

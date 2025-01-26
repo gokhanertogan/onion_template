@@ -1,4 +1,3 @@
-using BuildingBlocks.Result;
 using MediatR;
 
 namespace BuildingBlocks.CQRS;

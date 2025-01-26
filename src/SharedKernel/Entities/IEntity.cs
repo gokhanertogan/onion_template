@@ -1,4 +1,4 @@
-namespace ProjectName.Domain.Common;
+namespace SharedKernel.Entities;
 
 public interface IEntity<T> : IEntity
 {

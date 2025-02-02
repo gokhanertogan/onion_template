@@ -1,11 +1,16 @@
 # onion_template
-
+ProjectName
 src
+- BuildingBlocks
+    - BuildingBlocks
+- SharedKernel
 - services
- - ProjectName
-    -  ProjectName.Core
-    -  ProjectName.Application
-    -  ProjectName.Infrastructure
-        - Infrastructure
-        - Persistence
-    -  ProjectName.API
+ - ServiceNameService
+    -  ServiceName.Core
+        -  ServiceName.Application
+        -  ServiceName.Domain
+    -  ServiceName.Infrastructure
+        - ServiceName.Infrastructure
+        - ServiceName.Persistence
+    -  ServiceName.API
+    -  ServiceName.Contracts

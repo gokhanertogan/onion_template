@@ -1,0 +1,17 @@
+{
+    "author": "GokhanErtogan",
+    "classifications": [
+        "Web",
+        "API",
+        "Clean Architecture",
+        "Onion Architecture"
+    ],
+    "identity": "OnionTemplate",
+    "name": "Onion Architecture Template",
+    "shortName": "oniontemplate",
+    "tags": {
+        "language": "C#"
+    },
+    "sourceName": "ServiceName",
+    "preferNameDirectory": true
+}

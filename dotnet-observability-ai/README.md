@@ -90,7 +90,7 @@ Prompt contract:
 Worker then writes:
 
 - analysis JSON artifact
-- mock GitHub issue markdown artifact
+- GitHub issue + linked PR (when automation is enabled)
 
 ## Infrastructure
 
@@ -117,12 +117,17 @@ Security note:
 docker compose up -d
 ```
 
-2. Verify Ollama and model:
+2. Configure local runtime secrets (do not commit):
 
 ```bash
-ollama pull mistral:7b-instruct
-ollama list
+cp src/AiAnalyzerWorker/appsettings.Local.example.json src/AiAnalyzerWorker/appsettings.Local.json
 ```
+
+Update `src/AiAnalyzerWorker/appsettings.Local.json` with your own values:
+
+- `OpenAI.ApiKey`
+- `GitHub.Token`
+- set `GitHub.EnableIssuePrAutomation` to `true`
 
 3. Build all projects:
 
@@ -155,10 +160,11 @@ curl -H "x-correlation-id: manual-001" -H "x-user-id: user-1" "http://localhost:
   - `service.name: "order-api"`
   - `traceid: *`
 
-7. Check AI artifacts:
+7. Check AI artifacts and automation output:
 
 - AiAnalyzerWorker writes files under `analysis-output`
 - Example expected payload is in `samples/example-ai-output.json`
+- If GitHub automation is enabled, a new issue and linked PR should be created in the configured repository
 
 ## Performance Notes For 16GB RAM Local Environment
 

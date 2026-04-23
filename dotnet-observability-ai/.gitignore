@@ -5,3 +5,7 @@ proje-sablonu*.docx
 
 # OS noise
 .DS_Store
+
+# Local secret/runtime overrides
+src/AiAnalyzerWorker/appsettings.Local.json
+.env

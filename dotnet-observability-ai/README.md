@@ -105,6 +105,12 @@ Containers:
 
 ## Run Instructions
 
+Security note:
+
+- Do not commit API keys or tokens.
+- Provide `OPENAI_API_KEY` and `GITHUB_TOKEN` only at runtime (environment variables), or keep them in local-only `src/AiAnalyzerWorker/appsettings.Local.json`.
+- `appsettings.Local.json` is ignored by git.
+
 1. Start infra stack:
 
 ```bash

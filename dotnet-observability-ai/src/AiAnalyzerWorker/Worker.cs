@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -48,9 +49,19 @@ public class Worker(
                     foreach (var trace in grouped)
                     {
                         var prompt = BuildPrompt(trace.TraceId, trace.Logs);
-                        var analysis = await AskOllamaForAnalysisAsync(prompt, correlationId, stoppingToken);
+                        var analysis = await AskGptForAnalysisAsync(prompt, correlationId, stoppingToken);
                         var issue = BuildIssueDraft(trace.TraceId, analysis, trace.Logs);
                         await PersistArtifactsAsync(trace.TraceId, analysis, issue, stoppingToken);
+                        var automationResult = await TryCreateGitHubIssueAndPrAsync(trace.TraceId, analysis, issue, correlationId, stoppingToken);
+
+                        if (automationResult is not null)
+                        {
+                            logger.LogInformation("{@LogContext}", LogContextModel.Create(
+                                "Information",
+                                $"GitHub automation completed. Issue #{automationResult.IssueNumber}, PR #{automationResult.PullRequestNumber}, branch {automationResult.BranchName}",
+                                "ai-analyzer-worker",
+                                correlationId));
+                        }
 
                         logger.LogInformation("{@LogContext}", LogContextModel.Create(
                             "Information",
@@ -145,34 +156,54 @@ public class Worker(
         return result;
     }
 
-    private async Task<AiAnalysisResult> AskOllamaForAnalysisAsync(string prompt, string correlationId, CancellationToken cancellationToken)
+    private async Task<AiAnalysisResult> AskGptForAnalysisAsync(string prompt, string correlationId, CancellationToken cancellationToken)
     {
-        var client = httpClientFactory.CreateClient("ollama");
-        var model = configuration["Ollama:Model"] ?? "mistral:7b-instruct";
-
-        var body = new
-        {
-            model,
-            prompt,
-            stream = false,
-            format = "json"
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
-        };
-        request.Headers.Add(CorrelationHeaders.CorrelationId, correlationId);
-
-        using var response = await client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-        var wrapper = JsonNode.Parse(raw);
-        var modelResponse = wrapper?["response"]?.GetValue<string>() ?? "{}";
-
         try
         {
+            var client = httpClientFactory.CreateClient("openai");
+            var model = configuration["OpenAI:Model"] ?? "gpt-4.1";
+            var apiKey = configuration["OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new InvalidOperationException("OpenAI API key is missing. Set OpenAI:ApiKey or OPENAI_API_KEY.");
+            }
+
+            var body = new
+            {
+                model,
+                temperature = 0.2,
+                response_format = new { type = "json_object" },
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content = "You are a senior .NET SRE. Always return strict JSON only."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = prompt
+                    }
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+            };
+
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Add(CorrelationHeaders.CorrelationId, correlationId);
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+            var wrapper = JsonNode.Parse(raw);
+            var modelResponse = wrapper?["choices"]?[0]?["message"]?["content"]?.GetValue<string>() ?? "{}";
+
             var analysis = JsonSerializer.Deserialize<AiResponseDto>(modelResponse, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -180,7 +211,7 @@ public class Worker(
 
             if (analysis is null)
             {
-                throw new InvalidOperationException("Ollama response could not be deserialized.");
+                throw new InvalidOperationException("GPT response could not be deserialized.");
             }
 
             return new AiAnalysisResult(
@@ -191,11 +222,18 @@ public class Worker(
                 analysis.Severity ?? "Medium",
                 analysis.PrDiff ?? "diff --git a/src/Order.API/Controllers/InventoryController.cs b/src/Order.API/Controllers/InventoryController.cs\n--- a/src/Order.API/Controllers/InventoryController.cs\n+++ b/src/Order.API/Controllers/InventoryController.cs\n@@\n-throw new InvalidOperationException(\"Deterministic order rule failure in Order.API.\");\n+logger.LogWarning(\"Order rule rejected request {ItemId}\", itemId);\n+return BadRequest(\"Order rule prevented processing\");");
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "{@LogContext}", LogContextModel.Create(
+                "Warning",
+                "GPT analysis failed, fallback analysis generated",
+                "ai-analyzer-worker",
+                correlationId,
+                exception: ex));
+
             return new AiAnalysisResult(
                 "Fallback analysis",
-                "LLM returned invalid JSON",
+                "GPT returned invalid or unavailable response",
                 "Automated diagnostics may be incomplete",
                 "Tighten prompt and validate output parser",
                 "Medium",
@@ -269,6 +307,220 @@ public class Worker(
         await File.WriteAllTextAsync(issuePath, issueMarkdown, cancellationToken);
     }
 
+    private async Task<GitHubAutomationResult?> TryCreateGitHubIssueAndPrAsync(
+        string traceId,
+        AiAnalysisResult analysis,
+        GitHubIssueDraft issue,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var enabled = configuration.GetValue("GitHub:EnableIssuePrAutomation", false);
+        if (!enabled)
+        {
+            return null;
+        }
+
+        var owner = configuration["GitHub:Owner"];
+        var repository = configuration["GitHub:Repository"];
+        var defaultBranch = configuration["GitHub:DefaultBranch"] ?? "main";
+        var token = configuration["GitHub:Token"] ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+
+        if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repository) || string.IsNullOrWhiteSpace(token))
+        {
+            logger.LogWarning("{@LogContext}", LogContextModel.Create(
+                "Warning",
+                "GitHub automation skipped because owner/repository/token configuration is missing",
+                "ai-analyzer-worker",
+                correlationId));
+            return null;
+        }
+
+        var safeTrace = traceId.Replace(':', '_').Replace('/', '_');
+        var client = httpClientFactory.CreateClient("github");
+
+        var issueBody = issue.Description + "\n\n" +
+                        "## AI Diagnostics\n" +
+                        $"- Severity: {analysis.Severity}\n" +
+                        $"- TraceId: {traceId}\n";
+
+        var issueNumber = await CreateGitHubIssueAsync(client, owner, repository, token, issue.Title, issueBody, cancellationToken);
+        var baseSha = await GetDefaultBranchHeadShaAsync(client, owner, repository, defaultBranch, token, cancellationToken);
+
+        var branchName = $"ai/fix-{safeTrace}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        await CreateBranchAsync(client, owner, repository, token, branchName, baseSha, cancellationToken);
+
+        var filePath = $"ai-fixes/{safeTrace}.md";
+        var fileContent = BuildProposedFixMarkdown(traceId, analysis, issueNumber);
+        await CommitFileToBranchAsync(client, owner, repository, token, branchName, filePath, fileContent, cancellationToken);
+
+        var prTitle = $"AI fix proposal for trace {traceId}";
+        var prBody = "This PR was created automatically from telemetry-driven GPT analysis.\n\n" +
+                     $"Closes #{issueNumber}\n\n" +
+                     "## Suggested Diff\n" +
+                     "```diff\n" +
+                     analysis.PrDiff + "\n" +
+                     "```\n";
+
+        var prNumber = await CreatePullRequestAsync(client, owner, repository, token, prTitle, branchName, defaultBranch, prBody, cancellationToken);
+
+        return new GitHubAutomationResult(issueNumber, prNumber, branchName);
+    }
+
+    private static async Task<int> CreateGitHubIssueAsync(
+        HttpClient client,
+        string owner,
+        string repository,
+        string token,
+        string title,
+        string body,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            title,
+            body,
+            labels = new[] { "ai-analysis", "bug" }
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/repos/{owner}/{repository}/issues")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = JsonNode.Parse(raw);
+        return json?["number"]?.GetValue<int>()
+               ?? throw new InvalidOperationException("GitHub issue response did not include an issue number.");
+    }
+
+    private static async Task<string> GetDefaultBranchHeadShaAsync(
+        HttpClient client,
+        string owner,
+        string repository,
+        string defaultBranch,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        var refPath = Uri.EscapeDataString($"heads/{defaultBranch}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/repos/{owner}/{repository}/git/ref/{refPath}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = JsonNode.Parse(raw);
+        return json?["object"]?["sha"]?.GetValue<string>()
+               ?? throw new InvalidOperationException("GitHub ref response did not include object sha.");
+    }
+
+    private static async Task CreateBranchAsync(
+        HttpClient client,
+        string owner,
+        string repository,
+        string token,
+        string branchName,
+        string sha,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            @ref = $"refs/heads/{branchName}",
+            sha
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/repos/{owner}/{repository}/git/refs")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task CommitFileToBranchAsync(
+        HttpClient client,
+        string owner,
+        string repository,
+        string token,
+        string branchName,
+        string filePath,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            message = $"Add AI fix proposal for {branchName}",
+            content = Convert.ToBase64String(Encoding.UTF8.GetBytes(content)),
+            branch = branchName
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/repos/{owner}/{repository}/contents/{filePath}")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task<int> CreatePullRequestAsync(
+        HttpClient client,
+        string owner,
+        string repository,
+        string token,
+        string title,
+        string head,
+        string @base,
+        string body,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            title,
+            head,
+            @base,
+            body
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/repos/{owner}/{repository}/pulls")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = JsonNode.Parse(raw);
+        return json?["number"]?.GetValue<int>()
+               ?? throw new InvalidOperationException("GitHub pull request response did not include a PR number.");
+    }
+
+    private static string BuildProposedFixMarkdown(string traceId, AiAnalysisResult analysis, int issueNumber)
+    {
+        return $"# AI Fix Proposal for Trace {traceId}\n\n" +
+               $"Linked issue: #{issueNumber}\n\n" +
+               $"Severity: {analysis.Severity}\n\n" +
+               "## Root Cause\n" +
+               analysis.RootCause + "\n\n" +
+               "## Impact\n" +
+               analysis.Impact + "\n\n" +
+               "## Suggested Fix\n" +
+               analysis.Fix + "\n\n" +
+               "## Proposed Diff\n" +
+               "```diff\n" +
+               analysis.PrDiff + "\n" +
+               "```\n";
+    }
+
     private static string? ReadFirstString(JsonNode node, params string[] candidates)
     {
         foreach (var candidate in candidates)
@@ -312,4 +564,6 @@ public class Worker(
         public string? Severity { get; set; }
         public string? PrDiff { get; set; }
     }
+
+    private sealed record GitHubAutomationResult(int IssueNumber, int PullRequestNumber, string BranchName);
 }

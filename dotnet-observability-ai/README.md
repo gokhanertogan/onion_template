@@ -1,6 +1,6 @@
 # .NET 10 End-to-End Observability And AI Log Analysis
 
-This repository implements a production-oriented distributed .NET 10 system with OpenTelemetry, Elasticsearch, Kibana, and local LLM analysis using Ollama (Mistral).
+This repository implements a production-oriented distributed .NET 10 system with OpenTelemetry, Elasticsearch, Kibana, GPT-based analysis, and GitHub issue-to-PR automation.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ Request flow:
 5. OpenTelemetry exports traces/logs over OTLP to Collector
 6. Collector writes telemetry into Elasticsearch
 7. Kibana visualizes logs and traces
-8. AiAnalyzerWorker reads error logs from Elasticsearch and asks local Mistral for RCA + fix + diff suggestions
+8. AiAnalyzerWorker reads error logs from Elasticsearch, asks GPT for RCA + fix + diff suggestions, then can open a GitHub issue and linked PR
 
 ## Solution Structure
 
@@ -165,7 +165,7 @@ curl -H "x-correlation-id: manual-001" -H "x-user-id: user-1" "http://localhost:
 
 - No authentication
 - No PII masking
-- No live GitHub API integration (issue generation is mocked to markdown artifacts)
+- GitHub API automation is configuration-driven (disabled by default, can create issue and linked PR)
 
 ## Key Files
 

@@ -5,6 +5,8 @@ using OpenTelemetry.Trace;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 var serviceName = builder.Configuration["Service:Name"] ?? "ai-analyzer-worker";
 var otlpEndpoint = builder.Configuration["Otlp:Endpoint"] ?? "http://localhost:4317";
 

@@ -1,0 +1,8 @@
+{
+  "title": "Deterministic inventory rule failure cascades through gateway chain",
+  "root_cause": "ServiceB throws InvalidOperationException based on deterministic hash branch, and upstream services currently convert it to generic 500 responses.",
+  "impact": "Order processing requests fail end-to-end for specific requestId patterns, creating recurring user-visible 500 errors and noisy retries.",
+  "fix": "Replace exception-based deterministic branch in ServiceB with an explicit business validation response and map upstream handling to clear 4xx semantics where applicable.",
+  "severity": "High",
+  "pr_diff": "diff --git a/src/ServiceB/Controllers/InventoryController.cs b/src/ServiceB/Controllers/InventoryController.cs\n--- a/src/ServiceB/Controllers/InventoryController.cs\n+++ b/src/ServiceB/Controllers/InventoryController.cs\n@@\n-                if (deterministicFlag == 4)\n-                {\n-                    throw new InvalidOperationException(\"Deterministic inventory rule failure in ServiceB.\");\n-                }\n+                if (deterministicFlag == 4)\n+                {\n+                    logger.LogWarning(\"Inventory rule rejected request {ItemId}\", itemId);\n+                    return BadRequest(new { itemId, correlationId, reason = \"Inventory rule prevented processing\" });\n+                }"
+}

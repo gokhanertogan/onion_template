@@ -1,0 +1,7 @@
+# Local proposal/assignment documents (keep out of repository)
+proje-oneri-*.md
+proje-oneri-*.docx
+proje-sablonu*.docx
+
+# OS noise
+.DS_Store

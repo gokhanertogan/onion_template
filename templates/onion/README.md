@@ -87,8 +87,10 @@ From the solution root:
 dotnet new onion -n Payment --service-only -o .
 ```
 
-The new projects are added to the solution. Register the new API in `docker-compose.yml`.
-If the new service uses a different database provider, add its package version to `Directory.Packages.props`.
+The new projects are added to the solution. Add `src/Services/PaymentService/compose.yaml` to the `include`
+list in `docker-compose.yml`; CI builds every `src/Services/*/Dockerfile` automatically.
+If the new service uses a different database provider, add its package version to `Directory.Packages.props`
+and its database server to `docker-compose.yml`.
 
 ## Database migrations
 

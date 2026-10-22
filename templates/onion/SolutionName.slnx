@@ -17,6 +17,7 @@
   <Folder Name="/src/Services/" />
   <Folder Name="/src/Services/ServiceNameService/">
     <File Path="src/Services/ServiceNameService/Dockerfile" />
+    <File Path="src/Services/ServiceNameService/compose.yaml" />
     <Project Path="src/Services/ServiceNameService/ServiceName.API/ServiceName.API.csproj" />
     <Project Path="src/Services/ServiceNameService/ServiceName.Contracts/ServiceName.Contracts.csproj" />
   </Folder>

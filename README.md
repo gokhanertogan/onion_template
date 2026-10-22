@@ -112,6 +112,7 @@ ve `BuildingBlocks` üretilmez; mevcut olanlar kullanılır. Komut solution kök
 
 `create_project.sh` ilk servisi solution ile birlikte, sonrakileri `--service-only` ile oluşturur. Her servisten
 sonra projeleri ayrıca `dotnet sln add` ile ekler, çünkü şablonun post-action'ı hata durumunda sessizce devam eder.
+Servisin `compose.yaml` dosyasını da kökteki `docker-compose.yml`'ın `include` listesine ekler.
 
 ## 3. Çözüm yapısı ve katman kuralları
 
@@ -800,7 +801,15 @@ docker build -f src/Services/OrderService/Dockerfile -t order-api .
 docker compose up --build     # API + veritabanı
 ```
 
-`docker-compose.yml` Development ortamında API'yi ve seçilen veritabanını sağlık kontrolüyle başlatır.
+Compose iki katmandır:
+
+- `src/Services/<Ad>Service/compose.yaml`: servisin API'si. Her servis kendi dosyasını getirir, `--service-only`
+  ile de üretilir.
+- Kökteki `docker-compose.yml`: servis dosyalarını `include` ile toplar ve sağlık kontrollü **tek bir veritabanı
+  sunucusu** (`db`) tanımlar. Her servis bu sunucuda kendi veritabanını kullanır ve açılışta oluşturur; böylece
+  `localhost:5432` / `1433` portları servisler arasında çakışmaz ve `appsettings.Development.json` olduğu gibi
+  çalışır. SQLite varyantında sunucu yoktur, her servis kendi volume'unu kullanır.
+
 `dotnet user-jwts` anahtarları user secrets klasöründen salt okunur olarak container'a bağlanır; yerel token'lar
 container'da da geçerli olur.
 
@@ -809,10 +818,13 @@ container'da da geçerli olur.
 1. SDK `global.json`'dan kurulur.
 2. `dotnet restore`.
 3. Açıklı paket kontrolü: `dotnet list package --vulnerable --include-transitive`; herhangi bir bulgu build'i kırar.
-4. `dotnet format --verify-no-changes`.
+4. `dotnet format whitespace --verify-no-changes`. Kod stili (IDE kuralları) zaten build'de zorlanır;
+   `dotnet format style` kullanılmaz, çünkü `using` sıralamasını da denetler ve şablondaki sıralama servis adına
+   bağlıdır (`Basket`, `Catalog` gibi adlar `Microsoft.*`'tan önce sıralanır).
 5. Release build (uyarılar hata sayılır).
 6. `dotnet test`.
-7. Docker imajı build'i.
+7. `docker compose config` ile compose doğrulaması ve `src/Services/*/Dockerfile` ile bulunan her servisin imaj
+   build'i. Yeni servis için CI'da değişiklik gerekmez.
 
 Workflow yalnızca `contents: read` iznine sahiptir. Aynı dal için eski çalışmalar iptal edilir.
 
@@ -864,10 +876,10 @@ dotnet new onion -n Payment --service-only -o .
 
 Sonrasında:
 
-- Yeni API'yi `docker-compose.yml`'a ekleyin; port ve `UserSecretsId` değerlerini `launchSettings.json` ile
-  csproj'dan alın.
-- Yeni servis farklı bir DB sağlayıcısı kullanıyorsa paket sürümünü `Directory.Packages.props`'a ekleyin.
-- CI'daki imaj matrisine yeni servisi ekleyin.
+- `src/Services/PaymentService/compose.yaml` satırını `docker-compose.yml`'ın `include` listesine ekleyin
+  (`create_project.sh` bunu kendisi yapar). CI yeni servisin imajını otomatik build eder.
+- Yeni servis farklı bir DB sağlayıcısı kullanıyorsa paket sürümünü `Directory.Packages.props`'a, veritabanı
+  sunucusunu `docker-compose.yml`'a ekleyin.
 
 ### Yeni cross-cutting davranış
 
@@ -897,7 +909,7 @@ Aşağıdaki sınırlar bilinçli tercihlerdir; her biri açık bir genişleme n
 | Entegrasyon testi | SQLite | CI'da gerçek veritabanıyla ek suite |
 | Resilience | Yalnızca EF retry | Giden HTTP için `Microsoft.Extensions.Http.Resilience` (Polly'ye bağlıdır) |
 | Native AOT | Desteklenmez (reflection ile tarama) | Source generator ile handler ve endpoint kaydı |
-| Docker Compose | `--service-only` compose'u güncellemez | Elle ekleme; ileride şablon post-action'ı |
+| Docker Compose | `--service-only` tek başına `include` listesini güncellemez (`create_project.sh` günceller) | Tek satır elle ekleme; ileride şablon post-action'ı |
 
 ## 16. Şablon üzerinde geliştirme
 
@@ -905,14 +917,18 @@ Aşağıdaki sınırlar bilinçli tercihlerdir; her biri açık bir genişleme n
 
 ```text
 onion_template/
+├── .github/workflows/
+│   ├── template-ci.yml      # Şablonun kendi CI'ı: pack + tüm varyantlar + çoklu servis
+│   └── release.yml          # v* tag'inde NuGet.org'a yayın
 ├── templates/onion/         # Şablonun kendisi: üretilen solution'ın birebir kaynağı
-│   └── .template.config/    # dotnet new tanımı (parametreler, koşullar, post-action'lar)
+│   ├── .template.config/    # dotnet new tanımı (parametreler, koşullar, post-action'lar)
+│   └── .github/workflows/   # Üretilen solution'ın CI'ı (bu repo'da çalışmaz)
 ├── Onion.Templates.csproj   # templates/** klasörünü NuGet şablon paketine çevirir
 ├── create_project.sh        # Tek komutla solution + birden çok servis üretir
 └── README.md
 ```
 
-Şablona ait her şey `templates/onion` altındadır; kökte yalnızca paketleme ve yardımcı script bulunur.
+Şablona ait her şey `templates/onion` altındadır; kökte yalnızca paketleme, CI ve yardımcı script bulunur.
 
 ### Derleme ve doğrulama
 
@@ -929,3 +945,25 @@ Değişiklikten sonra farklı varyantları üretip doğrulayın:
 dotnet new onion -n Order -o /tmp/Order && (cd /tmp/Order && dotnet test)
 dotnet new onion -n Basket --database postgres --otel -o /tmp/Basket && (cd /tmp/Basket && dotnet test)
 ```
+
+### CI (`.github/workflows/template-ci.yml`)
+
+Her push ve PR'da şablon paketlenir, sonra paketten üretilen çıktılar üretilen solution'ın kendi kontrolleriyle
+doğrulanır:
+
+- **Varyant matrisi:** `--database` (`sqlserver`, `postgres`, `sqlite`) × `--otel`, toplam 6 iş. Servis adı
+  `Basket`'tir; `BuildingBlocks` ve `Microsoft`'tan önce sıralandığı için ada bağlı sorunları yakalar. Her işte
+  format kontrolü, Release build, testler ve `docker compose config`.
+- **Çoklu servis:** `create_project.sh ECommerce Order Basket -- --database postgres`; build, test, compose'da iki
+  API olduğunun kontrolü ve her servisin Docker imajı.
+
+### Yayınlama (`.github/workflows/release.yml`)
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+Tag push'u önce `template-ci`'ı çalıştırır, geçerse paketi tag'deki sürümle (`v` olmadan) üretip NuGet.org'a
+gönderir. Gereken tek ayar `NUGET_API_KEY` secret'ıdır; workflow `nuget` environment'ını kullanır, böylece
+GitHub'da bu environment'a onay kuralı eklenerek yayın elle onaylanabilir. Aynı sürüm tekrar gönderilirse
+`--skip-duplicate` ile atlanır. `Onion.Templates.csproj`'daki `1.0.0` yalnızca yerel pack için varsayılandır.

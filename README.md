@@ -68,7 +68,10 @@ dotnet new install ./templates/onion
 
 # Dağıtım için NuGet paketi
 dotnet pack Onion.Templates.csproj -o artifacts
-dotnet new install artifacts/GokhanErtogan.OnionTemplate.1.0.0.nupkg
+dotnet new install artifacts/OnionArchitecture.Templates.1.0.0.nupkg
+
+# Yayınlanmış paketten (NuGet.org)
+dotnet new install OnionArchitecture.Templates
 ```
 
 ### Parametreler

@@ -3,11 +3,11 @@
   <!--
     Packs templates/** into a NuGet template package:
       dotnet pack Onion.Templates.csproj -o artifacts
-      dotnet new install artifacts/GokhanErtogan.OnionTemplate.1.0.0.nupkg
+      dotnet new install artifacts/OnionArchitecture.Templates.1.0.0.nupkg
   -->
   <PropertyGroup>
     <PackageType>Template</PackageType>
-    <PackageId>GokhanErtogan.OnionTemplate</PackageId>
+    <PackageId>OnionArchitecture.Templates</PackageId>
     <PackageVersion>1.0.0</PackageVersion>
     <Title>Onion Architecture Microservice Template</Title>
     <Authors>Gökhan Ertoğan</Authors>

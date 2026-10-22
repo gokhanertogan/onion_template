@@ -1,0 +1,28 @@
+# Weekly update PRs for NuGet packages (Directory.Packages.props, dotnet tools), GitHub Actions
+# (pinned by commit SHA) and the Docker base images. Minor and patch updates are grouped into one PR.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories:
+      - /src/Services/*
+    schedule:
+      interval: weekly
+    groups:
+      docker-images:
+        patterns: ["*"]

@@ -826,7 +826,15 @@ container'da da geçerli olur.
 7. `docker compose config` ile compose doğrulaması ve `src/Services/*/Dockerfile` ile bulunan her servisin imaj
    build'i. Yeni servis için CI'da değişiklik gerekmez.
 
-Workflow yalnızca `contents: read` iznine sahiptir. Aynı dal için eski çalışmalar iptal edilir.
+Workflow yalnızca `contents: read` iznine sahiptir. Aynı dal için eski çalışmalar iptal edilir. Kullanılan
+action'lar tag yerine commit SHA ile sabitlenir (sürüm yanında yorum olarak yazar); bir tag'in sonradan başka bir
+commit'e taşınması pipeline'ı etkilemez.
+
+### Bağımlılık güncellemeleri (`.github/dependabot.yml`)
+
+Dependabot her hafta NuGet paketleri (`Directory.Packages.props`, `dotnet-tools.json`), GitHub Actions ve
+servislerin Docker base imajları için PR açar. Minor ve patch güncellemeleri tek PR'da gruplanır; major
+güncellemeler ayrı PR olarak gelir. SHA ile sabitlenmiş action'lar da bu şekilde güncel kalır.
 
 ### Üretime geçiş kontrol listesi
 
@@ -917,12 +925,14 @@ Aşağıdaki sınırlar bilinçli tercihlerdir; her biri açık bir genişleme n
 
 ```text
 onion_template/
-├── .github/workflows/
-│   ├── template-ci.yml      # Şablonun kendi CI'ı: pack + tüm varyantlar + çoklu servis
-│   └── release.yml          # v* tag'inde NuGet.org'a yayın
+├── .github/
+│   ├── dependabot.yml       # Bu repo'nun action'ları ve şablonun paket/imaj sürümleri
+│   └── workflows/
+│       ├── template-ci.yml  # Şablonun kendi CI'ı: pack + tüm varyantlar + çoklu servis
+│       └── release.yml      # v* tag'inde NuGet.org'a yayın
 ├── templates/onion/         # Şablonun kendisi: üretilen solution'ın birebir kaynağı
 │   ├── .template.config/    # dotnet new tanımı (parametreler, koşullar, post-action'lar)
-│   └── .github/workflows/   # Üretilen solution'ın CI'ı (bu repo'da çalışmaz)
+│   └── .github/             # Üretilen solution'ın CI'ı ve Dependabot'u (bu repo'da çalışmaz)
 ├── Onion.Templates.csproj   # templates/** klasörünü NuGet şablon paketine çevirir
 ├── create_project.sh        # Tek komutla solution + birden çok servis üretir
 └── README.md

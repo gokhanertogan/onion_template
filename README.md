@@ -55,7 +55,7 @@ Bu doküman şablonu kullanan ve geliştiren yazılımcılar içindir. Örnekler
 | Kimlik doğrulama | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.13 |
 | API dokümanı | Microsoft.AspNetCore.OpenApi (OpenAPI 3.1) | 10.0.13 |
 | Test | MSTest + Microsoft.Testing.Platform, Mvc.Testing | 4.5.1 |
-| Opsiyonel | OpenTelemetry (`--otel`) | 1.20.0 |
+| Opsiyonel | OpenTelemetry (`--otel`) | 1.20.1 |
 | Konteyner | `aspnet:10.0-noble-chiseled-extra` | — |
 
 ## 2. Kurulum ve kullanım

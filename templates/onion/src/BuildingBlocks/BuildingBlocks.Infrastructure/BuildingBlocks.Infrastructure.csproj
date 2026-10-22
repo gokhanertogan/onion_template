@@ -12,4 +12,8 @@
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BuildingBlocks.Tests" />
+  </ItemGroup>
+
 </Project>

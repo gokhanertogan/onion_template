@@ -81,6 +81,83 @@ public sealed class MediatorTests
     }
 
     [TestMethod]
+    public async Task CacheInvalidationBehavior_InvalidatesTags_OnlyAfterSuccess()
+    {
+        var counter = new Counter();
+        await using var provider = BuildProvider(services => services
+            .AddSingleton(counter)
+            .AddBuildingBlocksInfrastructure()
+            .AddBuildingBlocksApplication(typeof(MediatorTests).Assembly));
+
+        await using var scope = provider.CreateAsyncScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+
+        Assert.AreEqual(1, (await sender.Send(new CachedQuery("ok"))).Value);
+        Assert.IsTrue((await sender.Send(new InvalidateTestTag(Fail: true))).IsFailure);
+        Assert.AreEqual(1, (await sender.Send(new CachedQuery("ok"))).Value);
+        Assert.IsTrue((await sender.Send(new InvalidateTestTag(Fail: false))).IsSuccess);
+        Assert.AreEqual(2, (await sender.Send(new CachedQuery("ok"))).Value);
+    }
+
+    [TestMethod]
+    public async Task IdempotencyBehavior_ReplaysTheFirstSuccess_PerUserAndKey()
+    {
+        var counter = new Counter();
+        var user = new SwitchableUser { UserId = "alice" };
+        await using var provider = BuildIdempotencyProvider(counter, user);
+
+        await using var scope = provider.CreateAsyncScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        var key = Guid.NewGuid();
+
+        Assert.AreEqual(1, (await sender.Send(new CreateThing(key))).Value);
+        Assert.AreEqual(1, (await sender.Send(new CreateThing(key))).Value);
+        Assert.AreEqual(2, (await sender.Send(new CreateThing(Guid.NewGuid()))).Value);
+
+        user.UserId = "bob";
+        Assert.AreEqual(3, (await sender.Send(new CreateThing(key))).Value);
+
+        Assert.AreEqual(4, (await sender.Send(new CreateThing(null))).Value);
+        Assert.AreEqual(5, (await sender.Send(new CreateThing(null))).Value);
+    }
+
+    [TestMethod]
+    public async Task IdempotencyBehavior_DoesNotStoreFailures()
+    {
+        var counter = new Counter();
+        await using var provider = BuildIdempotencyProvider(counter, new SwitchableUser { UserId = "alice" });
+
+        await using var scope = provider.CreateAsyncScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        var key = Guid.NewGuid();
+
+        Assert.IsTrue((await sender.Send(new CreateThing(key, Fail: true))).IsFailure);
+        Assert.IsTrue((await sender.Send(new CreateThing(key, Fail: true))).IsFailure);
+        Assert.AreEqual(2, counter.Value);
+
+        Assert.AreEqual(3, (await sender.Send(new CreateThing(key))).Value);
+    }
+
+    [TestMethod]
+    public async Task IdempotencyBehavior_CoalescesConcurrentDuplicates()
+    {
+        var counter = new Counter();
+        await using var provider = BuildIdempotencyProvider(counter, new SwitchableUser { UserId = "alice" });
+        var key = Guid.NewGuid();
+
+        async Task<Result<int>> SendInOwnScope()
+        {
+            await using var scope = provider.CreateAsyncScope();
+            return await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CreateThing(key, Delay: TimeSpan.FromMilliseconds(200)));
+        }
+
+        var results = await Task.WhenAll(SendInOwnScope(), SendInOwnScope(), SendInOwnScope());
+
+        Assert.AreEqual(1, counter.Value);
+        Assert.IsTrue(results.All(r => r.IsSuccess && r.Value == 1));
+    }
+
+    [TestMethod]
     public void AddMediator_Throws_ForDuplicateHandlers()
     {
         var services = new ServiceCollection();
@@ -99,10 +176,25 @@ public sealed class MediatorTests
         configure(services);
         services.TryAddSingleton(new Counter());
         services.TryAddSingleton(new List<string>());
+        services.TryAddSingleton(new EventLog());
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
+    private static ServiceProvider BuildIdempotencyProvider(Counter counter, SwitchableUser user) =>
+        BuildProvider(services => services
+            .AddSingleton(counter)
+            .Replace(ServiceDescriptor.Singleton<ICurrentUser>(user))
+            .AddBuildingBlocksInfrastructure()
+            .AddBuildingBlocksApplication(typeof(MediatorTests).Assembly));
+
     public sealed record Ping(string Message) : IQuery<string>;
+
+    public sealed record CreateThing(Guid? IdempotencyKey, bool Fail = false, TimeSpan Delay = default) : ICommand<int>, IIdempotentCommand;
+
+    public sealed record InvalidateTestTag(bool Fail) : ICommand, ICacheInvalidator
+    {
+        public IReadOnlyCollection<string> CacheTagsToInvalidate => ["test"];
+    }
 
     public sealed record CachedQuery(string Key) : ICachedQuery<int>
     {
@@ -153,6 +245,22 @@ public sealed class MediatorTests
         }
     }
 
+    internal sealed class CreateThingHandler(Counter counter) : ICommandHandler<CreateThing, int>
+    {
+        public async Task<Result<int>> Handle(CreateThing request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(request.Delay, cancellationToken);
+            var calls = counter.Increment();
+            return request.Fail ? Error.Failure("Test.Fail", "fail") : calls;
+        }
+    }
+
+    internal sealed class InvalidateTestTagHandler : ICommandHandler<InvalidateTestTag>
+    {
+        public Task<Result> Handle(InvalidateTestTag request, CancellationToken cancellationToken) =>
+            Task.FromResult(request.Fail ? Result.Failure(Error.Failure("Test.Fail", "fail")) : Result.Success());
+    }
+
     internal sealed class SomeCommandHandler : ICommandHandler<SomeCommand>
     {
         public Task<Result> Handle(SomeCommand request, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
@@ -197,6 +305,15 @@ public sealed class MediatorTests
         public bool IsAuthenticated => false;
 
         public string? UserId => null;
+
+        public bool HasPermission(string permission) => false;
+    }
+
+    private sealed class SwitchableUser : ICurrentUser
+    {
+        public string? UserId { get; set; }
+
+        public bool IsAuthenticated => UserId is not null;
 
         public bool HasPermission(string permission) => false;
     }

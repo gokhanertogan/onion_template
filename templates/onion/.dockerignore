@@ -1,0 +1,14 @@
+**/.git
+**/.vs
+**/.vscode
+**/.idea
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/.DS_Store
+**/docker-compose*
+**/Dockerfile*
+**/secrets.json
+**/appsettings.Local.json
+README.md

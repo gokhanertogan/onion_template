@@ -1,0 +1,39 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path="global.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/" />
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/BuildingBlocks.Domain/BuildingBlocks.Domain.csproj" />
+    <Project Path="src/BuildingBlocks/BuildingBlocks.Application/BuildingBlocks.Application.csproj" />
+    <Project Path="src/BuildingBlocks/BuildingBlocks.Infrastructure/BuildingBlocks.Infrastructure.csproj" />
+    <Project Path="src/BuildingBlocks/BuildingBlocks.Web/BuildingBlocks.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/ServiceNameService/">
+    <File Path="src/Services/ServiceNameService/Dockerfile" />
+    <Project Path="src/Services/ServiceNameService/ServiceName.API/ServiceName.API.csproj" />
+    <Project Path="src/Services/ServiceNameService/ServiceName.Contracts/ServiceName.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/ServiceNameService/ServiceName.Core/">
+    <Project Path="src/Services/ServiceNameService/ServiceName.Core/ServiceName.Domain/ServiceName.Domain.csproj" />
+    <Project Path="src/Services/ServiceNameService/ServiceName.Core/ServiceName.Application/ServiceName.Application.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/ServiceNameService/ServiceName.Infrastructure/">
+    <Project Path="src/Services/ServiceNameService/ServiceName.Infrastructure/ServiceName.Infrastructure/ServiceName.Infrastructure.csproj" />
+    <Project Path="src/Services/ServiceNameService/ServiceName.Infrastructure/ServiceName.Persistence/ServiceName.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/ServiceNameService/tests/">
+    <Project Path="src/Services/ServiceNameService/tests/ServiceName.UnitTests/ServiceName.UnitTests.csproj" />
+    <Project Path="src/Services/ServiceNameService/tests/ServiceName.ArchitectureTests/ServiceName.ArchitectureTests.csproj" />
+    <Project Path="src/Services/ServiceNameService/tests/ServiceName.IntegrationTests/ServiceName.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BuildingBlocks.Tests/BuildingBlocks.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,30 @@
+# Keeps this repository's workflows and the template's own dependencies (templates/onion) up to date,
+# so generated solutions start with current package versions, actions and base images.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /templates/onion
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /templates/onion
+    schedule:
+      interval: weekly
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories:
+      - /templates/onion/src/Services/*
+    schedule:
+      interval: weekly
+    groups:
+      docker-images:
+        patterns: ["*"]

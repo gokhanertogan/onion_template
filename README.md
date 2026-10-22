@@ -729,12 +729,12 @@ güvenle ezilebilir.
 
 ## 12. Test stratejisi
 
-Tek servisli bir solution 41 testle gelir; her ek servis 28 test ekler. Tüm testler MSTest 4 ve
+Tek servisli bir solution 54 testle gelir; her ek servis 28 test ekler. Tüm testler MSTest 4 ve
 Microsoft.Testing.Platform üzerinde çalışır, mock kütüphanesi kullanılmaz; sahte nesneler elle yazılır.
 
 | Proje | Test sayısı | Kapsam |
 | --- | --- | --- |
-| `BuildingBlocks.Tests` | 13 | Pipeline sırası, kısıtı uymayan behavior'ın atlanması, validation kısa devresi, cache'in yalnızca başarıyı saklaması, duplicate handler tespiti, validator kuralları, Result ve JSON round-trip |
+| `BuildingBlocks.Tests` | 26 | Pipeline sırası, kısıtı uymayan behavior'ın atlanması, validation kısa devresi, cache'in yalnızca başarıyı saklaması, cache invalidation'ın yalnızca başarıdan sonra çalışması, idempotency (kullanıcı + anahtar başına tekrar, hataların saklanmaması, eşzamanlı kopyaların birleşmesi), duplicate handler tespiti, validator kuralları, Result ve JSON round-trip. Persistence testleri gerçek EF Core hattını (interceptor'lar, query filter, concurrency token) in-memory SQLite üzerinde çalıştırır: soft delete, auditing, eşzamanlı güncelleme, outbox'ın aynı transaction'da yazılması ve outbox işleyicisinin yeniden deneme, `MaxAttempts` ve tip allowlist davranışı |
 | `<Servis>.UnitTests` | 9 | Aggregate invariant'ları ve event'leri, handler'lar (`FakeOrderRepository` ile), validator'lar |
 | `<Servis>.ArchitectureTests` | 9 | Katman bağımlılıkları ve konvansiyonlar (reflection ile) |
 | `<Servis>.IntegrationTests` | 10 | Gerçek HTTP pipeline'ı uçtan uca |

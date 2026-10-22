@@ -1,0 +1,50 @@
+# Create a token first (from the solution root):
+#   dotnet user-jwts create --project src/Services/ServiceNameService/ServiceName.API --scope "service-names:read" --scope "service-names:write"
+# and paste it below.
+
+@baseUrl = http://localhost:5911
+@token = paste-token-here
+
+### Health (anonymous)
+GET {{baseUrl}}/health/ready
+
+### OpenAPI document (Development)
+GET {{baseUrl}}/openapi/v1.json
+
+### Create (idempotent)
+POST {{baseUrl}}/api/v1/service-names
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: 6f1f7a5e-6c1b-4e41-9a40-0d0c7c9b1a11
+
+{
+  "name": "First",
+  "description": "Created from the .http file"
+}
+
+### List
+GET {{baseUrl}}/api/v1/service-names?search=fir&page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Get by id
+@id = 00000000-0000-0000-0000-000000000000
+GET {{baseUrl}}/api/v1/service-names/{{id}}
+Authorization: Bearer {{token}}
+
+### Update
+PUT {{baseUrl}}/api/v1/service-names/{{id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Renamed",
+  "description": null
+}
+
+### Archive
+POST {{baseUrl}}/api/v1/service-names/{{id}}/archive
+Authorization: Bearer {{token}}
+
+### Delete
+DELETE {{baseUrl}}/api/v1/service-names/{{id}}
+Authorization: Bearer {{token}}

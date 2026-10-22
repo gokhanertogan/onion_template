@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Public contract of the service (HTTP DTOs and integration events).
+    No dependencies, so it can be shared as a NuGet package with consumers.
+  -->
+
+</Project>

@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Gökhan Ertoğan",
+  "classifications": [ "Web", "API", "Microservice", "Clean Architecture", "Onion Architecture", "DDD", "CQRS" ],
+  "identity": "GokhanErtogan.OnionTemplate.Service.CSharp",
+  "groupIdentity": "GokhanErtogan.OnionTemplate.Service",
+  "name": "Onion Architecture Microservice (zero third-party dependencies)",
+  "description": "Production-ready .NET 10 microservice: Onion/Clean architecture, DDD, CQRS with a built-in mediator, validation, result pattern, outbox, HybridCache, idempotency, JWT + permission auth, rate limiting, security headers, health checks, OpenAPI, Docker and tests. Every 'ServiceName' is replaced with the value of -n.",
+  "shortName": [ "onion" ],
+  "sourceName": "ServiceName",
+  "defaultName": "Sample",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "guids": [
+    "88d9f70f-77db-454c-8506-0f7c4519abcf"
+  ],
+  "forms": {
+    "kebab": { "identifier": "kebabCase" },
+    "camel": { "identifier": "firstLowerCaseInvariant" }
+  },
+  "symbols": {
+    "Database": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "sqlserver",
+      "description": "Database provider used by the persistence layer.",
+      "choices": [
+        { "choice": "sqlserver", "description": "SQL Server (Microsoft provider)" },
+        { "choice": "postgres", "description": "PostgreSQL (Npgsql provider)" },
+        { "choice": "sqlite", "description": "SQLite (Microsoft provider, zero infrastructure)" }
+      ]
+    },
+    "UseSqlServer": { "type": "computed", "value": "(Database == \"sqlserver\")" },
+    "UsePostgres": { "type": "computed", "value": "(Database == \"postgres\")" },
+    "UseSqlite": { "type": "computed", "value": "(Database == \"sqlite\")" },
+    "ServiceOnly": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Only generate src/Services/<Name>Service and add its projects to the existing solution. Run from the solution root with -o ."
+    },
+    "UseOpenTelemetry": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Add OpenTelemetry (OTLP) traces, metrics and logs. Adds CNCF OpenTelemetry packages."
+    },
+    "SolutionName": {
+      "type": "parameter",
+      "datatype": "string",
+      "description": "Solution file name. Defaults to the service name."
+    },
+    "SolutionNameValue": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "SolutionName",
+        "fallbackVariableName": "name"
+      },
+      "replaces": "SolutionName",
+      "fileRename": "SolutionName"
+    },
+    "ServiceNameKebab": {
+      "type": "derived",
+      "valueSource": "name",
+      "valueTransform": "kebab",
+      "replaces": "service-name"
+    },
+    "ServiceNameCamel": {
+      "type": "derived",
+      "valueSource": "name",
+      "valueTransform": "camel",
+      "replaces": "serviceName"
+    },
+    "HttpPort": {
+      "type": "generated",
+      "generator": "port",
+      "parameters": { "low": 5100, "high": 5999, "fallback": 5911 },
+      "replaces": "5911"
+    },
+    "HttpsPort": {
+      "type": "generated",
+      "generator": "port",
+      "parameters": { "low": 7100, "high": 7999, "fallback": 7911 },
+      "replaces": "7911"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Skip the automatic restore after creation."
+    }
+  },
+  "sources": [
+    {
+      "exclude": [
+        "**/[Bb]in/**",
+        "**/[Oo]bj/**",
+        ".template.config/**/*",
+        "**/.vs/**",
+        "**/.idea/**",
+        "**/TestResults/**",
+        "**/*.user",
+        "**/*.filelist",
+        "**/*.lock.json",
+        "**/.DS_Store",
+        "**/*.db",
+        "**/*.db-shm",
+        "**/*.db-wal"
+      ],
+      "modifiers": [
+        {
+          "condition": "(ServiceOnly)",
+          "exclude": [
+            "SolutionName.slnx",
+            "README.md",
+            "global.json",
+            "Directory.Build.props",
+            "Directory.Packages.props",
+            "docker-compose.yml",
+            ".editorconfig",
+            ".gitignore",
+            ".gitattributes",
+            ".dockerignore",
+            ".config/**",
+            ".github/**",
+            "src/BuildingBlocks/**",
+            "tests/**"
+          ]
+        },
+        {
+          "condition": "(!UseOpenTelemetry)",
+          "exclude": [ "src/BuildingBlocks/BuildingBlocks.Web/Observability/**" ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.Core/ServiceName.Domain/ServiceName.Domain.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.Core/ServiceName.Application/ServiceName.Application.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.Infrastructure/ServiceName.Infrastructure/ServiceName.Infrastructure.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.Infrastructure/ServiceName.Persistence/ServiceName.Persistence.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.Contracts/ServiceName.Contracts.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/ServiceName.API/ServiceName.API.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/tests/ServiceName.UnitTests/ServiceName.UnitTests.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/tests/ServiceName.ArchitectureTests/ServiceName.ArchitectureTests.csproj" },
+    { "condition": "(ServiceOnly)", "path": "src/Services/ServiceNameService/tests/ServiceName.IntegrationTests/ServiceName.IntegrationTests.csproj" },
+    { "condition": "(!ServiceOnly)", "path": "SolutionName.slnx" }
+  ],
+  "postActions": [
+    {
+      "id": "add-to-solution",
+      "condition": "(ServiceOnly)",
+      "description": "Add the new service projects to the existing solution.",
+      "manualInstructions": [ { "text": "Run 'dotnet sln add' for each project of the new service." } ],
+      "actionId": "D396686C-DE0E-4DE6-906D-291CD29FC5DE",
+      "continueOnError": true
+    },
+    {
+      "id": "restore",
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages.",
+      "manualInstructions": [ { "text": "Run 'dotnet restore'" } ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

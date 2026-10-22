@@ -1,0 +1,37 @@
+## .NET
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+artifacts/
+coverage*/
+*.coverage
+*.trx
+
+## IDEs
+.vs/
+.idea/
+*.sln.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Local secrets & databases (never commit)
+appsettings.Local.json
+*.local.json
+.env
+*.db
+*.db-shm
+*.db-wal

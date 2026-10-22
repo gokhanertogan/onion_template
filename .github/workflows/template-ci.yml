@@ -1,0 +1,122 @@
+name: template-ci
+
+# Packs the template, generates every supported variant and runs the generated solution's own checks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: template-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack
+        run: dotnet pack Onion.Templates.csproj -o artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: template-package
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+  variant:
+    name: variant (${{ matrix.database }}${{ matrix.otel && ', otel' || '' }})
+    runs-on: ubuntu-latest
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlserver, postgres, sqlite]
+        otel: [false, true]
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: template-package
+          path: artifacts
+
+      - name: Install template
+        run: dotnet new install artifacts/*.nupkg
+
+      # "Basket" sorts before "BuildingBlocks"/"Microsoft", which catches name-dependent ordering issues.
+      - name: Generate
+        run: dotnet new onion -n Basket -o out --database ${{ matrix.database }} ${{ matrix.otel && '--otel' || '' }}
+
+      - name: Format check
+        working-directory: out
+        run: dotnet format whitespace --verify-no-changes
+
+      - name: Build
+        working-directory: out
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        working-directory: out
+        run: dotnet test -c Release --no-build
+
+      - name: Validate compose file
+        working-directory: out
+        run: docker compose config --quiet
+
+  multi-service:
+    runs-on: ubuntu-latest
+    needs: pack
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: template-package
+          path: artifacts
+
+      - name: Install template
+        run: dotnet new install artifacts/*.nupkg
+
+      - name: Generate solution with two services
+        run: ./create_project.sh ECommerce Order Basket -- --database postgres
+
+      - name: Build and test
+        working-directory: ECommerce
+        run: |
+          dotnet format whitespace --verify-no-changes
+          dotnet build -c Release --no-restore
+          dotnet test -c Release --no-build
+
+      - name: Validate compose file
+        working-directory: ECommerce
+        run: |
+          docker compose config --quiet
+          test "$(docker compose config --services | grep -c -- '-api$')" -eq 2
+
+      - name: Build images
+        working-directory: ECommerce
+        run: |
+          for dockerfile in src/Services/*/Dockerfile; do
+            name=$(basename "$(dirname "$dockerfile")" Service | tr '[:upper:]' '[:lower:]')
+            docker build -f "$dockerfile" -t "$name-api:ci" .
+          done

@@ -34,8 +34,11 @@ jobs:
           dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
           ! grep -q -E "has the following vulnerable packages" vulnerable.txt
 
+      # Code style (IDE*) rules are enforced by the build (EnforceCodeStyleInBuild + TreatWarningsAsErrors).
+      # `dotnet format style` is not used: it also checks using order, and the template's using order
+      # depends on the service name, so a fresh "Basket" or "Catalog" service would fail it.
       - name: Format check
-        run: dotnet format --verify-no-changes --no-restore
+        run: dotnet format whitespace --verify-no-changes --no-restore
 
       - name: Build
         run: dotnet build -c Release --no-restore
@@ -48,5 +51,15 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -f src/Services/ServiceNameService/Dockerfile -t servicename-api:${{ github.sha }} .
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Build images
+        run: |
+          for dockerfile in src/Services/*/Dockerfile; do
+            name=$(basename "$(dirname "$dockerfile")" Service | tr '[:upper:]' '[:lower:]')
+            echo "::group::$name-api"
+            docker build -f "$dockerfile" -t "$name-api:${{ github.sha }}" .
+            echo "::endgroup::"
+          done

@@ -1,136 +1,138 @@
 # Onion Template
 
-Onion Template, tek komutla (`dotnet new onion -n Order`) üretime hazır bir .NET 10 mikroservisi üreten bir
-`dotnet new` şablonudur. Varsayılan çıktıda hiçbir üçüncü parti NuGet paketi yoktur; mediator, validation,
-result pattern, outbox ve izin tabanlı yetkilendirme şablonun içinde yazılmıştır.
+Onion Template is a `dotnet new` template that generates a production-ready .NET 10 microservice with a single
+command (`dotnet new onion -n Order`). The default output contains no third-party NuGet packages: the mediator,
+validation, result pattern, outbox and permission-based authorization are written inside the template.
 
-Bu doküman şablonu kullanan ve geliştiren yazılımcılar içindir. Örnekler `-n Order` ile üretilmiş bir servis
-üzerindendir; şablon kaynağında aynı yerlerde `ServiceName` yazar.
+This document is for developers who use and develop the template. Examples are based on a service generated
+with `-n Order`; the template source says `ServiceName` in the same places.
 
-## İçindekiler
+## Contents
 
-1. [Genel bakış](#1-genel-bakış)
-2. [Kurulum ve kullanım](#2-kurulum-ve-kullanım)
-3. [Çözüm yapısı ve katman kuralları](#3-çözüm-yapısı-ve-katman-kuralları)
-4. [Domain katmanı](#4-domain-katmanı)
-5. [Mediator ve CQRS](#5-mediator-ve-cqrs)
+1. [Overview](#1-overview)
+2. [Installation and usage](#2-installation-and-usage)
+3. [Solution structure and layer rules](#3-solution-structure-and-layer-rules)
+4. [Domain layer](#4-domain-layer)
+5. [Mediator and CQRS](#5-mediator-and-cqrs)
 6. [Validation](#6-validation)
 7. [Persistence](#7-persistence)
-8. [Caching, idempotency ve mesajlaşma](#8-caching-idempotency-ve-mesajlaşma)
-9. [Web katmanı ve güvenlik](#9-web-katmanı-ve-güvenlik)
-10. [Gözlemlenebilirlik](#10-gözlemlenebilirlik)
-11. [Yapılandırma referansı](#11-yapılandırma-referansı)
-12. [Test stratejisi](#12-test-stratejisi)
-13. [Build, Docker ve CI/CD](#13-build-docker-ve-cicd)
-14. [Geliştirici rehberi](#14-geliştirici-rehberi)
-15. [Bilinen sınırlar ve yol haritası](#15-bilinen-sınırlar-ve-yol-haritası)
-16. [Şablon üzerinde geliştirme](#16-şablon-üzerinde-geliştirme)
+8. [Caching, idempotency and messaging](#8-caching-idempotency-and-messaging)
+9. [Web layer and security](#9-web-layer-and-security)
+10. [Observability](#10-observability)
+11. [Configuration reference](#11-configuration-reference)
+12. [Testing strategy](#12-testing-strategy)
+13. [Build, Docker and CI/CD](#13-build-docker-and-cicd)
+14. [Developer guide](#14-developer-guide)
+15. [Known limitations and roadmap](#15-known-limitations-and-roadmap)
+16. [Working on the template](#16-working-on-the-template)
 
 ---
 
-## 1. Genel bakış
+## 1. Overview
 
-### Tasarım ilkeleri
+### Design principles
 
-- **Sıfır üçüncü parti bağımlılık:** yalnızca BCL ve Microsoft'un kendi paketleri. MediatR'ın ticari lisansa
-  geçmesi gibi lisans ve tedarik zinciri risklerini ortadan kaldırır.
-- **Bağımlılıklar içe doğru:** Domain hiçbir şeye, Application yalnızca Domain'e bağlıdır. Kural mimari
-  testlerle derleme sırasında zorlanır.
-- **Varsayılan olarak güvenli:** her endpoint kimlik doğrulama ister; açık olması gereken uçlar (health,
-  OpenAPI) bunu açıkça belirtir.
-- **Akış kontrolü için exception yok:** iş kuralı hataları tipli `Error` olarak döner ve HTTP katmanında
-  ProblemDetails'e çevrilir.
-- **Hızlı başarısız ol:** DI kayıtları (`ValidateOnBuild`) ve options (`ValidateOnStart`) uygulama açılırken
-  doğrulanır.
-- **Uyarı = hata:** .NET analyzer'ları `Recommended` modda çalışır, `TreatWarningsAsErrors` açıktır.
+- **Zero third-party dependencies:** only the BCL and Microsoft's own packages. This removes licensing and
+  supply-chain risks such as MediatR moving to a commercial license.
+- **Dependencies point inwards:** Domain depends on nothing, Application only on Domain. The rule is enforced by
+  architecture tests.
+- **Secure by default:** every endpoint requires authentication; endpoints that must be open (health, OpenAPI)
+  say so explicitly.
+- **No exceptions for control flow:** business rule failures are returned as a typed `Error` and converted to
+  ProblemDetails in the HTTP layer.
+- **Fail fast:** DI registrations (`ValidateOnBuild`) and options (`ValidateOnStart`) are validated when the
+  application starts.
+- **Warnings are errors:** .NET analyzers run in `Recommended` mode and `TreatWarningsAsErrors` is on.
 
-### Teknoloji yığını
+### Technology stack
 
-| Alan | Kullanılan | Sürüm |
+| Area | Used | Version |
 | --- | --- | --- |
-| Çalışma zamanı | .NET / ASP.NET Core Minimal API | 10.0 |
+| Runtime | .NET / ASP.NET Core Minimal API | 10.0 |
 | ORM | Entity Framework Core | 10.0.13 |
-| Veritabanı | SQL Server (varsayılan), PostgreSQL (Npgsql 10.0.3), SQLite | — |
+| Database | SQL Server (default), PostgreSQL (Npgsql 10.0.3), SQLite | — |
 | Cache | Microsoft.Extensions.Caching.Hybrid | 10.11.0 |
-| Kimlik doğrulama | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.13 |
-| API dokümanı | Microsoft.AspNetCore.OpenApi (OpenAPI 3.1) | 10.0.13 |
-| Test | MSTest + Microsoft.Testing.Platform, Mvc.Testing | 4.5.1 |
-| Opsiyonel | OpenTelemetry (`--otel`) | 1.20.1 |
-| Konteyner | `aspnet:10.0-noble-chiseled-extra` | — |
+| Authentication | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.13 |
+| API documentation | Microsoft.AspNetCore.OpenApi (OpenAPI 3.1) | 10.0.13 |
+| Testing | MSTest + Microsoft.Testing.Platform, Mvc.Testing | 4.5.1 |
+| Optional | OpenTelemetry (`--otel`) | 1.20.1 |
+| Container | `aspnet:10.0-noble-chiseled-extra` | — |
 
-## 2. Kurulum ve kullanım
+## 2. Installation and usage
 
-### Kurulum
+### Installation
 
 ```bash
-# Geliştirme sırasında klasörden (değişiklikler anında yansır)
+# From NuGet.org
+dotnet new install OnionArchitecture.Templates
+
+# From the folder while developing the template (changes apply immediately)
 dotnet new install ./templates/onion
 
-# Dağıtım için NuGet paketi
+# From a locally built package
 dotnet pack Onion.Templates.csproj -o artifacts
 dotnet new install artifacts/OnionArchitecture.Templates.1.0.0.nupkg
-
-# Yayınlanmış paketten (NuGet.org)
-dotnet new install OnionArchitecture.Templates
 ```
 
-### Parametreler
+### Parameters
 
-| Parametre | Kısa | Varsayılan | Açıklama |
+| Parameter | Short | Default | Description |
 | --- | --- | --- | --- |
-| `-n` | — | `Sample` | Servis adı. Proje, namespace, sınıf, route, izin ve cache anahtarlarına yansır |
-| `--database` | `-db` | `sqlserver` | `sqlserver`, `postgres` veya `sqlite` |
-| `--service-only` | — | `false` | Yalnızca `src/Services/<Ad>Service` üretir ve projeleri mevcut solution'a ekler |
-| `--solution-name` | `-sn` | servis adı | Solution dosyasının adı (`<ad>.slnx`) |
-| `--otel` | — | `false` | OpenTelemetry trace/metric/log ekler |
-| `--no-restore` | — | `false` | Oluşturma sonrası restore'u atlar |
+| `-n` | — | `Sample` | Service name. Used for projects, namespaces, classes, routes, permissions and cache keys |
+| `--database` | `-db` | `sqlserver` | `sqlserver`, `postgres` or `sqlite` |
+| `--service-only` | — | `false` | Generates only `src/Services/<Name>Service` and adds its projects to the existing solution |
+| `--solution-name` | `-sn` | service name | Name of the solution file (`<name>.slnx`) |
+| `--otel` | — | `false` | Adds OpenTelemetry traces, metrics and logs |
+| `--no-restore` | — | `false` | Skips the restore after generation |
 
-Her üretimde HTTP/HTTPS portları (5100–5999 ve 7100–7999 aralığında) ve API'nin `UserSecretsId` değeri
-yeniden üretilir. Böylece aynı makinede birden çok servis çakışmadan çalışır.
+Every generation picks new HTTP/HTTPS ports (in the 5100–5999 and 7100–7999 ranges) and a new `UserSecretsId`
+for the API, so several services can run side by side on the same machine.
 
-### İsim dönüşümleri
+### Name transformations
 
-| Şablondaki ifade | Biçim | `-n Order` sonucu | Nerede |
+| In the template | Form | Result for `-n Order` | Where |
 | --- | --- | --- | --- |
-| `ServiceName` | Olduğu gibi | `Order` | Klasör, proje, namespace, sınıf |
-| `servicename` | Küçük harf | `order` | Docker servis ve veritabanı adları |
-| `service-name` | Kebab case | `order` | Route (`/api/v1/orders`), izin (`orders:write`), cache anahtarı |
-| `serviceName` | İlk harf küçük | `order` | Değişken adları |
-| `SolutionName` | `--solution-name` ya da ad | `Order` | Solution dosyası, README başlığı |
+| `ServiceName` | As is | `Order` | Folders, projects, namespaces, classes |
+| `servicename` | Lower case | `order` | Docker service and database names |
+| `service-name` | Kebab case | `order` | Routes (`/api/v1/orders`), permissions (`orders:write`), cache keys |
+| `serviceName` | First letter lower case | `order` | Variable names |
+| `SolutionName` | `--solution-name` or the name | `Order` | Solution file, README title |
 
-Çok kelimeli adlarda kebab biçimi kelimeleri ayırır: `-n OrderManagement` → `/api/v1/order-managements`.
+For multi-word names the kebab form separates the words: `-n OrderManagement` → `/api/v1/order-managements`.
 
-### Senaryolar
+### Scenarios
 
 ```bash
 dotnet new onion -n Order                                # SQL Server
 dotnet new onion -n Order --database postgres --otel     # PostgreSQL + OpenTelemetry
-dotnet new onion -n Order --database sqlite              # Altyapısız hızlı başlangıç
-dotnet new onion -n Payment --service-only -o .          # Mevcut solution'a servis ekleme
+dotnet new onion -n Order --database sqlite              # Quick start without infrastructure
+dotnet new onion -n Payment --service-only -o .          # Add a service to an existing solution
 ./create_project.sh ECommerce Order Basket -- --database postgres
 ```
 
-`--service-only` modunda kök dosyalar (`Directory.*.props`, `global.json`, `.editorconfig`, docker-compose, CI)
-ve `BuildingBlocks` üretilmez; mevcut olanlar kullanılır. Komut solution kökünde `-o .` ile çalıştırılmalıdır.
+In `--service-only` mode the root files (`Directory.*.props`, `global.json`, `.editorconfig`, docker-compose, CI)
+and `BuildingBlocks` are not generated; the existing ones are used. Run the command from the solution root with
+`-o .`.
 
-`create_project.sh` ilk servisi solution ile birlikte, sonrakileri `--service-only` ile oluşturur. Her servisten
-sonra projeleri ayrıca `dotnet sln add` ile ekler, çünkü şablonun post-action'ı hata durumunda sessizce devam eder.
-Servisin `compose.yaml` dosyasını da kökteki `docker-compose.yml`'ın `include` listesine ekler.
+`create_project.sh` creates the first service together with the solution and the following ones with
+`--service-only`. After each service it also adds the projects with `dotnet sln add`, because the template's
+post-action silently continues on failure. It also adds the service's `compose.yaml` to the `include` list of the
+root `docker-compose.yml`.
 
-## 3. Çözüm yapısı ve katman kuralları
+## 3. Solution structure and layer rules
 
-Bir solution, tüm servislerin paylaştığı dört `BuildingBlocks` projesinden ve her servis için altı üretim + üç
-test projesinden oluşur. Bağımlılıklar yalnızca içe doğru akar.
+A solution consists of four `BuildingBlocks` projects shared by all services and, per service, six production
+projects plus three test projects. Dependencies only flow inwards.
 
 ```mermaid
 flowchart TB
     subgraph S["OrderService"]
-        API["Order.API<br/><small>Endpoint, composition root</small>"]
-        INF["Order.Infrastructure<br/><small>Dış entegrasyonlar</small>"]
-        PER["Order.Persistence<br/><small>DbContext, migration</small>"]
-        APP["Order.Application<br/><small>Use case, validator</small>"]
-        DOM["Order.Domain<br/><small>Aggregate, event, hata</small>"]
-        CON["Order.Contracts<br/><small>Public DTO, event</small>"]
+        API["Order.API<br/><small>Endpoints, composition root</small>"]
+        INF["Order.Infrastructure<br/><small>External integrations</small>"]
+        PER["Order.Persistence<br/><small>DbContext, migrations</small>"]
+        APP["Order.Application<br/><small>Use cases, validators</small>"]
+        DOM["Order.Domain<br/><small>Aggregates, events, errors</small>"]
+        CON["Order.Contracts<br/><small>Public DTOs, events</small>"]
         API --> INF & PER
         INF --> APP
         PER --> APP
@@ -138,8 +140,8 @@ flowchart TB
         APP --> CON
     end
     subgraph B["BuildingBlocks"]
-        BW["Web<br/><small>Güvenlik, ProblemDetails</small>"]
-        BI["Infrastructure<br/><small>EF taban, outbox, cache</small>"]
+        BW["Web<br/><small>Security, ProblemDetails</small>"]
+        BI["Infrastructure<br/><small>EF base, outbox, cache</small>"]
         BA["Application<br/><small>Mediator, pipeline</small>"]
         BD["Domain<br/><small>Entity, Result, Error</small>"]
         BW --> BA
@@ -152,140 +154,140 @@ flowchart TB
     DOM -.-> BD
 ```
 
-Oklar referans yönünü gösterir. API'nin Application'a doğrudan referansı çizimde gösterilmemiştir.
+Arrows show the reference direction. The API's direct reference to Application is not drawn.
 
 ```
 src/
   BuildingBlocks/
     BuildingBlocks.Domain           Entity, AggregateRoot, ValueObject, DomainEvent, Result/Error
-    BuildingBlocks.Application      Mediator, CQRS, behavior'lar, validation, cache/event soyutlamaları
-    BuildingBlocks.Infrastructure   EF Core tabanı, interceptor'lar, outbox, HybridCache, event bus
-    BuildingBlocks.Web              ServiceDefaults: güvenlik, ProblemDetails, rate limit, health, OpenAPI
+    BuildingBlocks.Application      Mediator, CQRS, behaviors, validation, cache/event abstractions
+    BuildingBlocks.Infrastructure   EF Core base, interceptors, outbox, HybridCache, event bus
+    BuildingBlocks.Web              ServiceDefaults: security, ProblemDetails, rate limiting, health, OpenAPI
   Services/OrderService/
-    Order.Core/Order.Domain         Aggregate, strongly typed id, event, hata, repository arayüzü
-    Order.Core/Order.Application    Use case'ler (vertical slice): command, query, validator, handler
-    Order.Infrastructure/Order.Infrastructure  Dış entegrasyonlar, integration event tüketicileri
-    Order.Infrastructure/Order.Persistence     DbContext, EF konfigürasyonları, repository, migration
-    Order.Contracts                 Public DTO ve integration event'ler (bağımlılıksız)
-    Order.API                       Minimal API endpoint'leri, composition root
+    Order.Core/Order.Domain         Aggregate, strongly typed id, events, errors, repository interface
+    Order.Core/Order.Application    Use cases (vertical slices): commands, queries, validators, handlers
+    Order.Infrastructure/Order.Infrastructure  External integrations, integration event consumers
+    Order.Infrastructure/Order.Persistence     DbContext, EF configurations, repositories, migrations
+    Order.Contracts                 Public DTOs and integration events (no dependencies)
+    Order.API                       Minimal API endpoints, composition root
     tests/                          Unit, Architecture, Integration
 tests/BuildingBlocks.Tests
 ```
 
-### Proje referansları
+### Project references
 
-| Proje | Referans verdiği projeler | Paketler |
+| Project | References | Packages |
 | --- | --- | --- |
 | BuildingBlocks.Domain | — | — |
-| BuildingBlocks.Application | BB.Domain | DI ve Logging abstractions |
+| BuildingBlocks.Application | BB.Domain | DI and Logging abstractions |
 | BuildingBlocks.Infrastructure | BB.Application | EF Core Relational, Caching.Hybrid, Hosting/Options |
 | BuildingBlocks.Web | BB.Application | ASP.NET Core, JwtBearer, OpenApi |
 | Order.Domain | BB.Domain | — |
 | Order.Application | Order.Domain, Order.Contracts, BB.Application | — |
-| Order.Persistence | Order.Application, BB.Infrastructure | EF sağlayıcısı, HealthChecks.EF, EF Design |
+| Order.Persistence | Order.Application, BB.Infrastructure | EF provider, HealthChecks.EF, EF Design |
 | Order.Infrastructure | Order.Application, BB.Infrastructure | — |
 | Order.Contracts | — | — |
-| Order.API | Tüm servis projeleri, BB.Web | EF Design (yalnızca `dotnet ef` için) |
+| Order.API | All service projects, BB.Web | EF Design (only for `dotnet ef`) |
 
-### Ortak derleme ayarları
+### Shared build settings
 
 - **`Directory.Build.props`:** `net10.0`, nullable, `AnalysisMode=Recommended`, `TreatWarningsAsErrors`,
-  `EnforceCodeStyleInBuild`, deterministik build, NuGet audit (`all`, `low`). Adı `Tests` ile biten projeler
-  otomatik olarak MSTest runner'lı test projesi olur.
-- **`Directory.Packages.props`:** Central Package Management ve transitive pinning. SqlClient'ın getirdiği açıklı
-  `System.Security.Cryptography.Pkcs` burada yamalı sürüme sabitlenir.
-- **`global.json`:** SDK 10.0.100 (`latestFeature`) ve `Microsoft.Testing.Platform` test runner'ı.
-- **`.editorconfig`:** stil kuralları ve analyzer ayarları. `Migrations` klasörü üretilmiş kod sayılır ve
-  analyzer dışı tutulur.
+  `EnforceCodeStyleInBuild`, deterministic builds, NuGet audit (`all`, `low`). Projects whose name ends with
+  `Tests` automatically become test projects with the MSTest runner.
+- **`Directory.Packages.props`:** Central Package Management with transitive pinning. The vulnerable
+  `System.Security.Cryptography.Pkcs` brought in by SqlClient is pinned to a patched version here.
+- **`global.json`:** SDK 10.0.100 (`latestFeature`) and the `Microsoft.Testing.Platform` test runner.
+- **`.editorconfig`:** style rules and analyzer settings. The `Migrations` folder is treated as generated code and
+  excluded from analyzers.
 
-### Neden `using`'ler namespace içinde?
+### Why are `using` directives inside the namespace?
 
-Servis adı ile aggregate adı aynıdır (`Order.Domain.Orders.Order`). `using` dosyanın başında olursa C# isim
-çözümlemesi `Order` adını önce kök namespace'e bağlar ve tip bulunamaz. `using`'ler namespace içinde olunca iç
-kapsamda aranır ve tip kazanır. Kural `.editorconfig`'te `IDE0065` uyarısıyla zorlanır; aynı nedenle domain
-olayları aggregate ile aynı namespace'te durur.
+The service name and the aggregate name are the same (`Order.Domain.Orders.Order`). With `using` directives at the
+top of the file, C# name resolution binds `Order` to the root namespace first and the type is not found. Inside
+the namespace they are resolved in the inner scope and the type wins. The rule is enforced in `.editorconfig` with
+`IDE0065`; for the same reason domain events live in the same namespace as their aggregate.
 
-## 4. Domain katmanı
+## 4. Domain layer
 
-Domain, iş kurallarının tek sahibidir ve hiçbir pakete bağlı değildir. Durum yalnızca aggregate metotlarıyla
-değişir; public setter yoktur.
+The domain is the single owner of business rules and depends on no package. State only changes through aggregate
+methods; there are no public setters.
 
-### Yapı taşları (`BuildingBlocks.Domain`)
+### Building blocks (`BuildingBlocks.Domain`)
 
-| Tip | Sorumluluk |
+| Type | Responsibility |
 | --- | --- |
-| `Entity<TId>` | Kimlik tabanlı eşitlik (tip + `Id`), `==` / `!=` operatörleri |
-| `AggregateRoot<TId>` | Tutarlılık sınırı; domain event listesi (`Raise`, `ClearDomainEvents`) ve concurrency token `Version` |
-| `ValueObject` | Bileşen tabanlı eşitlik. Basit değer nesneleri için `record` tercih edilir |
-| `IAuditable` | `CreatedAtUtc`, `CreatedBy`, `ModifiedAtUtc`, `ModifiedBy`. Persistence doldurur |
-| `ISoftDeletable` | `IsDeleted`, `DeletedAtUtc`, `DeletedBy`. Silme güncellemeye dönüşür |
-| `IVersioned` | Sağlayıcıdan bağımsız optimistic concurrency token (`Guid`) |
-| `IRepository<TAggregate, TId>` | Yalnızca aggregate root için: `GetByIdAsync`, `Add`, `Remove`. `SaveChanges` yoktur |
-| `IDomainEvent` / `DomainEvent` | `EventId` (GUID v7) ve `OccurredOnUtc` taşıyan değişmez kayıt |
+| `Entity<TId>` | Identity-based equality (type + `Id`), `==` / `!=` operators |
+| `AggregateRoot<TId>` | Consistency boundary; domain event list (`Raise`, `ClearDomainEvents`) and the `Version` concurrency token |
+| `ValueObject` | Component-based equality. Prefer `record` for simple value objects |
+| `IAuditable` | `CreatedAtUtc`, `CreatedBy`, `ModifiedAtUtc`, `ModifiedBy`. Filled in by persistence |
+| `ISoftDeletable` | `IsDeleted`, `DeletedAtUtc`, `DeletedBy`. Deletes become updates |
+| `IVersioned` | Provider-agnostic optimistic concurrency token (`Guid`) |
+| `IRepository<TAggregate, TId>` | Aggregate roots only: `GetByIdAsync`, `Add`, `Remove`. No `SaveChanges` |
+| `IDomainEvent` / `DomainEvent` | Immutable record carrying `EventId` (GUID v7) and `OccurredOnUtc` |
 
 ### Result pattern
 
-Beklenen hatalar exception değil, değer olarak döner. `Result` ve `Result<T>` başarı bayrağı ile bir `Error`
-taşır; başarısız bir sonucun `Value` alanına erişmek `InvalidOperationException` fırlatır.
+Expected failures are returned as values, not exceptions. `Result` and `Result<T>` carry a success flag and an
+`Error`; reading `Value` of a failed result throws `InvalidOperationException`.
 
 ```csharp
 public record Error(string Code, string Description, ErrorType Type);
 // ErrorType: Failure, Validation, Problem, NotFound, Conflict, Unauthorized, Forbidden
 
-Result<Guid> ok = id;                                 // T → başarı (örtük dönüşüm)
-Result<Guid> fail = OrderErrors.NotFound(orderId);    // Error → hata (örtük dönüşüm)
+Result<Guid> ok = id;                                 // T → success (implicit conversion)
+Result<Guid> fail = OrderErrors.NotFound(orderId);    // Error → failure (implicit conversion)
 return result.Match(Results.Ok, ApiResults.Problem);
 ```
 
-- `Map`, `Bind`, `Match` ve `Result.Combine` fonksiyonel zincirleme sağlar.
-- `ValidationError`, birden çok alan hatasını tek `Error` altında toplar.
-- `IResultFactory<TSelf>` static abstract üyesiyle generic kod (örneğin validation behavior) reflection
-  kullanmadan başarısız sonuç üretir.
-- `Result<T>` JSON ile ileri geri dönüştürülebilir; HybridCache'in L2 katmanında saklanabilmesi için gereklidir.
-- Hata kodları sabit ve makine tarafından okunabilir olmalıdır (`Order.NotFound`, `Order.NameAlreadyExists`).
-  İstemciler bu kodlara göre dallanır.
+- `Map`, `Bind`, `Match` and `Result.Combine` provide functional chaining.
+- `ValidationError` collects several field errors under a single `Error`.
+- With the static abstract member of `IResultFactory<TSelf>`, generic code (such as the validation behavior)
+  creates failed results without reflection.
+- `Result<T>` round-trips through JSON, which is required to store it in HybridCache's L2 layer.
+- Error codes must be stable and machine readable (`Order.NotFound`, `Order.NameAlreadyExists`). Clients branch
+  on these codes.
 
-### Örnek aggregate
+### Sample aggregate
 
-- **Strongly typed id:** `readonly record struct OrderId(Guid Value)`; `New()` zaman sıralı GUID v7 üretir,
-  farklı aggregate id'lerinin karışmasını derleme anında engeller.
-- **Factory metodu:** `Order.Create(name, description)` kuralları doğrular, `Result<Order>` döner ve
-  `OrderCreatedDomainEvent` yükseltir. Constructor'lar private'dır.
-- **Davranış metotları:** `Update`, `Archive` (ikinci çağrıda `Conflict`), `MarkDeleted`; her biri kendi
-  event'ini yükseltir.
-- **Hata kataloğu:** `OrderErrors` her iş hatasını tek yerde, sabit kodlarla tanımlar.
-- **Sınır sabitleri:** `NameMaxLength = 100`, `DescriptionMaxLength = 1000`. Validator ve EF konfigürasyonu aynı
-  sabitleri kullanır, değerler tek yerden yönetilir.
+- **Strongly typed id:** `readonly record struct OrderId(Guid Value)`; `New()` creates a time-ordered GUID v7, and
+  mixing up ids of different aggregates is caught at compile time.
+- **Factory method:** `Order.Create(name, description)` validates the rules, returns `Result<Order>` and raises
+  `OrderCreatedDomainEvent`. Constructors are private.
+- **Behavior methods:** `Update`, `Archive` (`Conflict` on the second call), `MarkDeleted`; each raises its own
+  event.
+- **Error catalog:** `OrderErrors` defines every business error in one place with stable codes.
+- **Limit constants:** `NameMaxLength = 100`, `DescriptionMaxLength = 1000`. The validator and the EF
+  configuration use the same constants, so the values are managed in one place.
 
-## 5. Mediator ve CQRS
+## 5. Mediator and CQRS
 
-MediatR yerine `BuildingBlocks.Application` içinde bağımlılıksız bir mediator vardır. Her request tipi için
-pipeline ilk çağrıda kurulup cache'lenir; sonraki çağrıların maliyeti bir sözlük araması ve delegate zinciridir.
+Instead of MediatR, `BuildingBlocks.Application` contains a dependency-free mediator. The pipeline for each request
+type is built and cached on the first call; subsequent calls cost a dictionary lookup and a delegate chain.
 
-### Sözleşmeler
+### Contracts
 
-| Arayüz | Dönüş | Kullanım |
+| Interface | Returns | Use |
 | --- | --- | --- |
-| `ICommand` | `Result` | Değer döndürmeyen durum değişikliği |
-| `ICommand<T>` | `Result<T>` | Değer döndüren durum değişikliği (örn. oluşturulan id) |
-| `IQuery<T>` | `Result<T>` | Yan etkisiz okuma |
-| `ICommandHandler<,>` / `IQueryHandler<,>` | — | Her request için tam olarak bir handler |
-| `IPipelineBehavior<TRequest, TResponse>` | — | Cross-cutting davranış; generic kısıtlar hangi request'e uygulanacağını belirler |
-| `ISender.Send` | `Task<TResponse>` | Scoped; request'i pipeline üzerinden handler'a iletir |
+| `ICommand` | `Result` | State change without a return value |
+| `ICommand<T>` | `Result<T>` | State change that returns a value (e.g. the created id) |
+| `IQuery<T>` | `Result<T>` | Side-effect free read |
+| `ICommandHandler<,>` / `IQueryHandler<,>` | — | Exactly one handler per request |
+| `IPipelineBehavior<TRequest, TResponse>` | — | Cross-cutting behavior; generic constraints decide which requests it applies to |
+| `ISender.Send` | `Task<TResponse>` | Scoped; sends the request through the pipeline to its handler |
 
-### Kayıt ve çalışma
+### Registration and execution
 
-- `AddBuildingBlocksApplication(assembly)` assembly'yi tarar; tüm handler'ları transient, validator'ları ve event
-  handler'ları scoped kaydeder.
-- Aynı request için ikinci bir handler bulunursa kayıt aşamasında `InvalidOperationException` fırlatılır.
-- Behavior'lar açık generic tip olarak kaydedilir. `MediatorRegistry` her request tipi için onları kapatmayı
-  dener; generic kısıtı uymayan behavior (`MakeGenericType` → `ArgumentException`) o request'in pipeline'ına
-  hiç eklenmez.
-- Registry container başına singleton olduğu için testlerde farklı konfigürasyonlar birbirini etkilemez.
+- `AddBuildingBlocksApplication(assembly)` scans the assembly; it registers all handlers as transient, and
+  validators and event handlers as scoped.
+- If a second handler is found for the same request, registration throws `InvalidOperationException`.
+- Behaviors are registered as open generic types. `MediatorRegistry` tries to close them for each request type; a
+  behavior whose generic constraints are not satisfied (`MakeGenericType` → `ArgumentException`) is never added to
+  that request's pipeline.
+- The registry is a singleton per container, so different configurations do not affect each other in tests.
 
-### Pipeline sırası
+### Pipeline order
 
-Kayıt sırası çalışma sırasıdır; ilk kaydedilen en dıştadır.
+Registration order is execution order; the first registered behavior is the outermost.
 
 ```mermaid
 flowchart TB
@@ -295,30 +297,30 @@ flowchart TB
     C --> CI["5 · CacheInvalidationBehavior"]
     CI --> U["6 · UnitOfWorkBehavior"]
     U --> H["Handler"]
-    V -. "geçersiz: ValidationError" .-> R(("Yanıt"))
-    I -. "tekrar eden anahtar: kayıtlı sonuç" .-> R
+    V -. "invalid: ValidationError" .-> R(("Response"))
+    I -. "repeated key: stored result" .-> R
     C -. "cache hit" .-> R
 ```
 
-| # | Behavior | Uygulandığı request | Davranış |
+| # | Behavior | Applies to | Behavior |
 | --- | --- | --- | --- |
-| 1 | `LoggingBehavior` | Tümü | Activity (span), source-generated log, süre histogramı, hata sayacı; 500 ms üstü yavaş istek uyarısı. Payload loglanmaz |
-| 2 | `ValidationBehavior` | `TResponse : IResultFactory` | Tüm validator'ları çalıştırır; hata varsa handler çağrılmadan `ValidationError` döner |
-| 3 | `IdempotencyBehavior` | `IIdempotentCommand` | Aynı kullanıcı + komut + anahtar için ilk başarılı sonucu 24 saat saklar ve tekrar döndürür |
-| 4 | `CachingBehavior` | `ICachedQuery` | Başarılı sonucu cache'ten sunar; başarısız sonuç asla cache'lenmez |
-| 5 | `CacheInvalidationBehavior` | `ICacheInvalidator` | Başarılı commit sonrası belirtilen tag'leri temizler |
-| 6 | `UnitOfWorkBehavior` | `IBaseCommand` | Handler başarılıysa `SaveChangesAsync` çağırır; başarısızsa hiçbir şey yazılmaz |
+| 1 | `LoggingBehavior` | All | Activity (span), source-generated logs, duration histogram, failure counter; slow request warning above 500 ms. Payloads are not logged |
+| 2 | `ValidationBehavior` | `TResponse : IResultFactory` | Runs all validators; on errors returns `ValidationError` without calling the handler |
+| 3 | `IdempotencyBehavior` | `IIdempotentCommand` | Stores the first successful result per user + command + key for 24 hours and replays it |
+| 4 | `CachingBehavior` | `ICachedQuery` | Serves successful results from the cache; failures are never cached |
+| 5 | `CacheInvalidationBehavior` | `ICacheInvalidator` | Clears the given tags after a successful commit |
+| 6 | `UnitOfWorkBehavior` | `IBaseCommand` | Calls `SaveChangesAsync` if the handler succeeded; nothing is written on failure |
 
-Sonuçları doğrudan bu sıradan gelir:
+Consequences that follow directly from this order:
 
-- Geçersiz istek cache'e ve veritabanına hiç ulaşmaz.
-- Idempotent bir tekrar, commit ve cache invalidation'ı yeniden tetiklemez.
-- Cache invalidation commit'ten sonra çalışır; eski veri yeniden cache'lenemez.
-- Handler'lar `SaveChanges` çağırmaz; işlem sınırı komutun kendisidir.
+- An invalid request never reaches the cache or the database.
+- An idempotent replay does not trigger the commit or cache invalidation again.
+- Cache invalidation runs after the commit, so stale data cannot be cached again.
+- Handlers do not call `SaveChanges`; the transaction boundary is the command itself.
 
-### Vertical slice örneği
+### Vertical slice example
 
-Her use case kendi klasöründe, tek dosyada request + validator + handler olarak durur:
+Each use case lives in its own folder as request + validator + handler in a single file:
 
 ```csharp
 public sealed record CreateOrderCommand(string Name, string? Description, Guid? IdempotencyKey = null)
@@ -344,14 +346,14 @@ internal sealed class CreateOrderCommandHandler(IOrderRepository repository)
 }
 ```
 
-Okuma tarafında query handler'lar aggregate repository'yi değil, `IOrderReadRepository`'yi kullanır. Bu
-repository `AsNoTracking` ile doğrudan response modeline projeksiyon yapar.
+On the read side, query handlers use `IOrderReadRepository` instead of the aggregate repository. It projects
+directly to the response model with `AsNoTracking`.
 
 ## 6. Validation
 
-FluentValidation yerine küçük, bağımlılıksız bir fluent validator vardır. Validation iki katmanda yapılır:
-Application validator'ı girdinin biçimini kontrol edip tüm hataları birlikte döner; domain ise invariant'ları
-her zaman korur.
+Instead of FluentValidation there is a small, dependency-free fluent validator. Validation happens in two layers:
+the application validator checks the shape of the input and returns all errors together, while the domain always
+protects its invariants.
 
 ### API
 
@@ -369,22 +371,22 @@ internal sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrde
 }
 ```
 
-| Öğe | Açıklama |
+| Member | Description |
 | --- | --- |
-| `RuleFor` / `RuleForEach` | Property ya da koleksiyon elemanı için kural zinciri başlatır; property yolu ifadeden okunur (`Address.Street`, `Lines[1]`) |
-| Yerleşik kurallar | `NotNull`, `NotEmpty`, `Empty`, `Equal`, `MaximumLength`, `MinimumLength`, `Length`, `Matches`, `EmailAddress`, `GreaterThan(OrEqualTo)`, `LessThan(OrEqualTo)`, `InclusiveBetween`, `IsInEnum` |
-| `Must` / `MustAsync` | Özel kural; async kural repository gibi scoped servis kullanabilir |
-| `WithMessage` / `WithErrorCode` / `WithName` | Son kuralın mesajını, kodunu ya da property adını değiştirir; mesajda `{PropertyName}` kullanılabilir |
-| `When` | Kuralı koşula bağlar |
-| `StopOnFirstFailure` | Zincirde ilk hatadan sonra durur (varsayılan: tüm kurallar çalışır) |
-| `SetValidator` | İç nesneyi kendi validator'ıyla doğrular; `null` değer atlanır |
+| `RuleFor` / `RuleForEach` | Starts a rule chain for a property or collection element; the property path is read from the expression (`Address.Street`, `Lines[1]`) |
+| Built-in rules | `NotNull`, `NotEmpty`, `Empty`, `Equal`, `MaximumLength`, `MinimumLength`, `Length`, `Matches`, `EmailAddress`, `GreaterThan(OrEqualTo)`, `LessThan(OrEqualTo)`, `InclusiveBetween`, `IsInEnum` |
+| `Must` / `MustAsync` | Custom rule; an async rule can use scoped services such as repositories |
+| `WithMessage` / `WithErrorCode` / `WithName` | Changes the message, code or property name of the last rule; messages can use `{PropertyName}` |
+| `When` | Makes the rule conditional |
+| `StopOnFirstFailure` | Stops the chain after the first failure (default: all rules run) |
+| `SetValidator` | Validates a nested object with its own validator; `null` values are skipped |
 
-Yeni bir kural, `IRuleBuilder<T, TProperty>` üzerinde bir extension metodu yazılarak eklenir.
+A new rule is added by writing an extension method on `IRuleBuilder<T, TProperty>`.
 
-### Hata kodları ve HTTP yanıtı
+### Error codes and HTTP response
 
-Her hata `"<Property>.<Kural>"` kodunu taşır (örn. `Name.NotEmpty`). Web katmanı kodları property yoluna göre
-gruplar ve RFC 9457 `ValidationProblem` döner:
+Every error carries the code `"<Property>.<Rule>"` (e.g. `Name.NotEmpty`). The web layer groups codes by property
+path and returns an RFC 9457 `ValidationProblem`:
 
 ```json
 {
@@ -400,90 +402,90 @@ gruplar ve RFC 9457 `ValidationProblem` döner:
 }
 ```
 
-Validator'lar scoped kaydedilir ve `IValidator<T>` üzerinden çözülür. Bir request için birden çok validator
-olabilir; hepsinin hataları birleştirilir.
+Validators are registered as scoped and resolved through `IValidator<T>`. A request can have several validators;
+their errors are merged.
 
 ## 7. Persistence
 
-Her servisin kendi veritabanı ve `AppDbContextBase`'den türeyen tek bir DbContext'i vardır. Audit, soft delete,
-concurrency ve outbox gibi ortak davranışlar konvansiyon ve interceptor olarak tek yerde uygulanır; servis kodu
-bunları tekrar yazmaz.
+Each service has its own database and a single DbContext derived from `AppDbContextBase`. Shared behavior such as
+auditing, soft delete, concurrency and the outbox is applied in one place as conventions and interceptors; service
+code does not repeat it.
 
 ### `AppDbContextBase`
 
-- Türetilmiş context'in assembly'sindeki tüm `IEntityTypeConfiguration` sınıflarını uygular.
-- **Konvansiyonlar:** string'ler varsayılan 512 karakter, decimal'ler `(18, 4)`. Her ikisi de konfigürasyonda
-  ezilebilir.
-- `ISoftDeletable` entity'lere `!IsDeleted` global query filter'ı ve `IsDeleted` index'i ekler.
-- `IVersioned` entity'lerde `Version` alanını concurrency token yapar.
-- `OutboxMessages` tablosunu modele ekler.
-- `IUnitOfWork`'ü uygular. `DbUpdateConcurrencyException`'ı Application katmanının `ConcurrencyException`'ına
-  çevirir; web katmanı bunu 409 olarak döner.
+- Applies every `IEntityTypeConfiguration` in the derived context's assembly.
+- **Conventions:** strings default to 512 characters, decimals to `(18, 4)`. Both can be overridden in
+  configuration.
+- Adds an `!IsDeleted` global query filter and an `IsDeleted` index to `ISoftDeletable` entities.
+- Makes `Version` the concurrency token of `IVersioned` entities.
+- Adds the `OutboxMessages` table to the model.
+- Implements `IUnitOfWork`. Converts `DbUpdateConcurrencyException` to the application layer's
+  `ConcurrencyException`, which the web layer returns as 409.
 
-### Interceptor'lar
+### Interceptors
 
-Interceptor'lar sırayla çalışır; sıra önemlidir.
+Interceptors run in order, and the order matters.
 
-| # | Interceptor | Ne yapar |
+| # | Interceptor | What it does |
 | --- | --- | --- |
-| 1 | `SoftDeleteInterceptor` | `Deleted` durumundaki `ISoftDeletable` entity'yi `Modified` yapar; `IsDeleted`, `DeletedAtUtc`, `DeletedBy` alanlarını doldurur |
-| 2 | `AuditingInterceptor` | Eklemede `Created*`, güncellemede `Modified*` alanlarını `TimeProvider` ve `ICurrentUser` ile doldurur; `Created*` alanlarının değişmesini engeller |
-| 3 | `VersioningInterceptor` | Her ekleme ve güncellemede `Version`'a yeni GUID v7 atar. `rowversion` ya da `xmin` gerektirmez, tüm sağlayıcılarda çalışır |
-| 4 | `OutboxInterceptor` | Aggregate'lerin domain event'lerini JSON olarak `OutboxMessage` satırlarına yazar ve listeyi temizler |
+| 1 | `SoftDeleteInterceptor` | Turns a `Deleted` `ISoftDeletable` entity into `Modified`; fills `IsDeleted`, `DeletedAtUtc`, `DeletedBy` |
+| 2 | `AuditingInterceptor` | Fills `Created*` on insert and `Modified*` on update using `TimeProvider` and `ICurrentUser`; prevents `Created*` from changing |
+| 3 | `VersioningInterceptor` | Assigns a new GUID v7 to `Version` on every insert and update. Needs no `rowversion` or `xmin`, works on every provider |
+| 4 | `OutboxInterceptor` | Writes the aggregates' domain events as JSON to `OutboxMessage` rows and clears the list |
 
-Soft delete'in ilk sırada olması gerekir. Böylece silme güncellemeye dönüştükten sonra audit ve versiyon
-alanları da güncellenir.
+Soft delete must come first, so that once a delete has become an update the audit and version fields are updated
+as well.
 
 ### Transactional outbox
 
-Domain event'ler, durumu değiştiren `SaveChanges` ile aynı transaction içinde outbox tablosuna yazılır. Bu yüzden
-"veri kaydedildi ama event kayboldu" durumu oluşmaz.
+Domain events are written to the outbox table in the same transaction as the `SaveChanges` that changes the state.
+This rules out "the data was saved but the event was lost".
 
 ```mermaid
 flowchart LR
-    subgraph Yazma["Kayıt (tek transaction)"]
-        H["Command handler<br/><small>Aggregate event yükseltir</small>"] --> OI["OutboxInterceptor<br/><small>Event'i JSON satıra çevirir</small>"]
+    subgraph Write["Save (single transaction)"]
+        H["Command handler<br/><small>Aggregate raises events</small>"] --> OI["OutboxInterceptor<br/><small>Turns events into JSON rows</small>"]
         OI --> DB[("Orders + OutboxMessages")]
     end
-    subgraph Teslim["Teslim (arka plan)"]
-        P["OutboxProcessor<br/><small>5 sn, 50'lik parti</small>"] --> DH["Domain handler<br/><small>IDomainEventHandler</small>"]
+    subgraph Deliver["Delivery (background)"]
+        P["OutboxProcessor<br/><small>5 s, batches of 50</small>"] --> DH["Domain handler<br/><small>IDomainEventHandler</small>"]
         DH --> EB["IEventBus<br/><small>Integration event</small>"]
-        EB --> CO["Tüketici<br/><small>Integration handler</small>"]
+        EB --> CO["Consumer<br/><small>Integration handler</small>"]
     end
     DB -- "ProcessedOnUtc = null" --> P
-    DH -. "hata: Attempts + 1, en fazla 5 deneme" .-> P
+    DH -. "failure: Attempts + 1, at most 5 attempts" .-> P
 ```
 
-- `OutboxProcessor<TDbContext>` bir `BackgroundService`'tir. `PeriodicTimer` ile (varsayılan 5 sn, dev'de 1 sn)
-  işlenmemiş mesajları `Id` sırasıyla 50'lik partiler halinde okur; GUID v7 zaman sıralıdır. Parti doluysa
-  beklemeden devam eder.
-- Her mesaj `IDomainEventDispatcher` ile ilgili tüm `IDomainEventHandler<T>`'lere dağıtılır. Başarıda
-  `ProcessedOnUtc`, hatada `Error` ve `Attempts` güncellenir. 5 denemeden sonra mesaj artık alınmaz
-  (poison message).
-- **Güvenlik:** tip adı deserialize edilmeden önce doğrulanır. Yalnızca `IDomainEvent` uygulayan somut tipler
-  kabul edilir; değiştirilmiş bir satır keyfi tip oluşturamaz.
-- **Teslim garantisi:** at-least-once. Event handler'lar idempotent yazılmalıdır.
+- `OutboxProcessor<TDbContext>` is a `BackgroundService`. Using a `PeriodicTimer` (5 s by default, 1 s in
+  development) it reads unprocessed messages in `Id` order in batches of 50; GUID v7 values are time ordered. When a
+  batch is full it continues without waiting.
+- Each message is dispatched through `IDomainEventDispatcher` to all matching `IDomainEventHandler<T>`s. On success
+  `ProcessedOnUtc` is set, on failure `Error` and `Attempts` are updated. After 5 attempts the message is no longer
+  picked up (poison message).
+- **Security:** the type name is checked before deserializing. Only concrete types implementing `IDomainEvent` are
+  accepted, so a tampered row cannot create arbitrary types.
+- **Delivery guarantee:** at-least-once. Event handlers must be idempotent.
 
-### Repository'ler
+### Repositories
 
-- `Repository<TAggregate, TId>` tabanı `FindAsync`, `Add` ve `Remove` sağlar, `SaveChanges` çağırmaz. Servis
-  repository'si yalnızca aggregate'e özel sorguları ekler (`NameExistsAsync`).
-- Okuma repository'si (`IOrderReadRepository`) `AsNoTracking` kullanır ve `ToPagedListAsync` ile sayfalar. Bu
-  yardımcı önce count, sonra sayfa sorgusu çalıştırır; count sıfırsa ikinci sorguyu atlar.
-- Sayfalama 1 tabanlıdır. `PageRequest` değerleri güvenli sınırlara çeker: sayfa en az 1, sayfa boyutu 1–100 arası.
+- The `Repository<TAggregate, TId>` base provides `FindAsync`, `Add` and `Remove`, and does not call `SaveChanges`.
+  A service repository only adds aggregate-specific queries (`NameExistsAsync`).
+- The read repository (`IOrderReadRepository`) uses `AsNoTracking` and pages with `ToPagedListAsync`. The helper
+  runs the count query first and the page query second, and skips the second query when the count is zero.
+- Paging is 1-based. `PageRequest` clamps values to safe limits: page at least 1, page size between 1 and 100.
 
-### Veritabanı sağlayıcıları
+### Database providers
 
-| Seçenek | Paket | Bağlantı ayarları |
+| Option | Package | Connection settings |
 | --- | --- | --- |
 | `sqlserver` | Microsoft.EntityFrameworkCore.SqlServer | `EnableRetryOnFailure` |
 | `postgres` | Npgsql.EntityFrameworkCore.PostgreSQL | `EnableRetryOnFailure` |
 | `sqlite` | Microsoft.EntityFrameworkCore.Sqlite | — |
 
-Development ortamında `EnableDetailedErrors` açıktır. Connection string `ConnectionStrings:<Servis>Db`
-anahtarından okunur; yoksa uygulama açıklı bir hatayla durur.
+`EnableDetailedErrors` is on in Development. The connection string is read from `ConnectionStrings:<Service>Db`;
+if it is missing, the application stops with a clear error.
 
-### Migration'lar
+### Migrations
 
 ```bash
 dotnet tool restore
@@ -492,15 +494,15 @@ dotnet ef migrations add Initial \
   --startup-project src/Services/OrderService/Order.API --output-dir Migrations
 ```
 
-- `DatabaseInitializer`, `Database:ApplyMigrationsOnStartup=true` olduğunda (Development) migration'ları uygular.
-  Hiç migration yoksa `EnsureCreated` ile şemayı oluşturur ve bunu uyarı olarak loglar.
-- Üretimde migration'lar pipeline'da idempotent bir bundle ile uygulanır:
+- `DatabaseInitializer` applies migrations when `Database:ApplyMigrationsOnStartup=true` (Development). If there
+  are no migrations, it creates the schema with `EnsureCreated` and logs a warning.
+- In production, migrations are applied in the pipeline with an idempotent bundle:
   `dotnet ef migrations bundle --idempotent --self-contained`.
 
-## 8. Caching, idempotency ve mesajlaşma
+## 8. Caching, idempotency and messaging
 
-Cache ve idempotency aynı `ICacheService` soyutlamasını kullanır. Bu soyutlama HybridCache ile uygulanır: L1
-bellek, isteğe bağlı L2 dağıtık cache, stampede koruması ve tag ile invalidation.
+Caching and idempotency use the same `ICacheService` abstraction, implemented with HybridCache: L1 memory, an
+optional L2 distributed cache, stampede protection and tag-based invalidation.
 
 ### Query cache
 
@@ -509,59 +511,59 @@ public sealed record GetOrderByIdQuery(Guid Id) : ICachedQuery<OrderResponse>
 {
     public string CacheKey => OrderCacheKeys.ById(Id);                    // "orders:{id:N}"
     public IReadOnlyCollection<string> CacheTags => OrderCacheKeys.Tags;  // ["orders"]
-    public TimeSpan? Expiration => OrderCacheKeys.Expiration;             // 5 dk
+    public TimeSpan? Expiration => OrderCacheKeys.Expiration;             // 5 min
 }
 ```
 
-- Aynı anahtar için eş zamanlı istekler tek bir handler çalışmasında birleştirilir (stampede koruması).
-- Başarısız sonuçlar cache'lenmez: factory içinde özel bir exception ile cache dışına taşınır ve olduğu gibi
-  döndürülür.
-- Tüm girdiler aggregate tag'i ile işaretlenir. `ICacheInvalidator` uygulayan her komut, başarılı commit'ten sonra
-  bu tag'i temizler; tekil kayıtlar ve tüm liste sayfaları birlikte geçersiz olur.
-- **Liste anahtarı:** arama terimi büyük harfe çevrilir, sayfa ve sayfa boyutu eklenir. Validator arama terimini
-  100 karakterle sınırladığı için anahtar 512 karakter sınırını aşmaz.
-- **HybridCache ayarları:** varsayılan süre 5 dk, en fazla 1 MB payload, en fazla 512 karakter anahtar.
+- Concurrent requests for the same key are coalesced into a single handler execution (stampede protection).
+- Failed results are not cached: they are carried out of the cache factory with a dedicated exception and returned
+  as is.
+- All entries are tagged with the aggregate tag. Every command implementing `ICacheInvalidator` clears this tag
+  after a successful commit; single entries and every list page are invalidated together.
+- **List key:** the search term is upper-cased and the page and page size are appended. The validator limits the
+  search term to 100 characters, so the key never exceeds the 512-character limit.
+- **HybridCache settings:** 5 min default expiration, at most 1 MB payload, at most 512-character keys.
 
-### Dağıtık L2 cache
+### Distributed L2 cache
 
-Bir `IDistributedCache` kaydı `AddBuildingBlocksInfrastructure()`'dan **önce** yapılırsa HybridCache onu otomatik
-olarak L2 olarak kullanır. Redis paketi üçüncü parti olduğu için şablonda yoktur. Birden çok instance'ta
-tutarlı idempotency için dağıtık cache zorunludur.
+If an `IDistributedCache` is registered **before** `AddBuildingBlocksInfrastructure()`, HybridCache automatically
+uses it as L2. The Redis package is third-party, so it is not part of the template. A distributed cache is required
+for consistent idempotency across multiple instances.
 
 ### Idempotency
 
-1. İstemci `Idempotency-Key: <guid>` header'ı gönderir; endpoint bunu komutun `IdempotencyKey` alanına koyar.
-2. `IdempotencyBehavior` anahtarı `idempotency:{komut tipi}:{kullanıcı}:{key}` biçiminde oluşturur.
-3. İlk başarılı sonuç 24 saat saklanır. Aynı anahtarla gelen tekrarlar handler'ı çalıştırmadan aynı sonucu
-   alır ve tekrar olduğu loglanır.
-4. Aynı anda gelen kopyalar stampede koruması sayesinde tek bir çalışmada birleştirilir. Başarısız sonuç
-   saklanmaz, istemci düzeltip aynı anahtarla tekrar deneyebilir.
+1. The client sends an `Idempotency-Key: <guid>` header; the endpoint puts it into the command's `IdempotencyKey`.
+2. `IdempotencyBehavior` builds the key as `idempotency:{command type}:{user}:{key}`.
+3. The first successful result is stored for 24 hours. Repeats with the same key get the same result without
+   running the handler, and the replay is logged.
+4. Concurrent duplicates are coalesced into a single execution by stampede protection. Failed results are not
+   stored, so the client can fix the request and retry with the same key.
 
-Anahtarın içinde kullanıcı kimliği olduğu için bir kullanıcı başka bir kullanıcının sonucunu tekrar oynatamaz.
+Because the key contains the user id, a user cannot replay another user's result.
 
-### Domain event ve integration event
+### Domain events and integration events
 
 | | Domain event | Integration event |
 | --- | --- | --- |
-| Tanım yeri | `Order.Domain` (`OrderCreatedDomainEvent`) | `Order.Contracts` (`OrderCreatedIntegrationEvent`) |
-| Kapsam | Servis içi | Servisler arası (public sözleşme) |
-| Taşıyıcı | Outbox → `IDomainEventDispatcher` | `IEventBus` |
+| Defined in | `Order.Domain` (`OrderCreatedDomainEvent`) | `Order.Contracts` (`OrderCreatedIntegrationEvent`) |
+| Scope | Inside the service | Between services (public contract) |
+| Transport | Outbox → `IDomainEventDispatcher` | `IEventBus` |
 | Handler | `IDomainEventHandler<T>` (Application) | `IIntegrationEventHandler<T>` (Infrastructure) |
-| Teslim | At-least-once | Varsayılan bus'ta process içi |
+| Delivery | At-least-once | In-process with the default bus |
 
-Üretilen örnekte akış şöyledir: domain event outbox'tan teslim edilir, `OrderCreatedDomainEventHandler`
-integration event'i `IEventBus`'a yayınlar ve Infrastructure'daki `OrderCreatedIntegrationEventHandler` onu
-tüketir.
+In the generated sample the flow is: the domain event is delivered from the outbox, `OrderCreatedDomainEventHandler`
+publishes the integration event to `IEventBus`, and `OrderCreatedIntegrationEventHandler` in Infrastructure consumes
+it.
 
-Varsayılan `InMemoryEventBus` 10.000 kapasiteli bir `Channel` ve onu okuyan bir `BackgroundService`'ten oluşur;
-her mesaj kendi DI scope'unda işlenir. Tek process (modüler monolit, geliştirme) için uygundur. Servisler arası
-gerçek teslim için `IEventBus` bir broker uygulamasıyla (RabbitMQ, Kafka, Azure Service Bus) değiştirilir;
-Application katmanı değişmez.
+The default `InMemoryEventBus` is a `Channel` with a capacity of 10,000 and a `BackgroundService` that reads it;
+each message is handled in its own DI scope. It suits a single process (modular monolith, development). For real
+delivery between services, `IEventBus` is replaced with a broker implementation (RabbitMQ, Kafka, Azure Service
+Bus); the application layer does not change.
 
-## 9. Web katmanı ve güvenlik
+## 9. Web layer and security
 
-`BuildingBlocks.Web` her servise aynı üretim varsayılanlarını üç çağrıyla verir. `Program.cs` bu yüzden
-20 satırı geçmez:
+`BuildingBlocks.Web` gives every service the same production defaults with three calls, so `Program.cs` stays
+under 20 lines:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -579,380 +581,381 @@ app.MapEndpoints(app.MapGroup("api/v1"));
 await app.RunAsync();
 ```
 
-### Middleware sırası (`UseServiceDefaults`)
+### Middleware order (`UseServiceDefaults`)
 
-1. `UseExceptionHandler`: yakalanmamış exception'ları ProblemDetails'e çevirir.
-2. `UseStatusCodePages`: gövdesiz 401/403/404 yanıtlarına ProblemDetails gövdesi ekler.
-3. `UseHsts`: Development dışında.
+1. `UseExceptionHandler`: converts unhandled exceptions to ProblemDetails.
+2. `UseStatusCodePages`: adds a ProblemDetails body to bodiless 401/403/404 responses.
+3. `UseHsts`: outside Development.
 4. `UseHttpsRedirection`.
 5. `SecurityHeadersMiddleware`.
 6. `CorrelationIdMiddleware`.
 7. `UseCors`.
 8. `UseAuthentication`.
-9. `UseRateLimiter`: kimlik doğrulamadan sonra gelir, böylece limit kullanıcı bazlı uygulanabilir.
+9. `UseRateLimiter`: comes after authentication so limits can be applied per user.
 10. `UseAuthorization`.
 11. `UseRequestTimeouts`.
 
-### Kimlik doğrulama ve yetkilendirme
+### Authentication and authorization
 
-- **JWT bearer:** ayarlar `Authentication:Schemes:Bearer` bölümünden bağlanır (`Authority`, `ValidAudiences`,
-  `ValidIssuer`). `MapInboundClaims = false` ile `sub` ve `scope` claim'leri olduğu gibi kalır. Saat kayması
-  toleransı 30 sn'dir.
-- **Varsayılan olarak güvenli:** fallback policy kimlik doğrulanmış kullanıcı ister. Health ve OpenAPI uçları
-  açıkça `AllowAnonymous` işaretlidir.
-- **İzin tabanlı yetkilendirme:** `RequirePermission("orders:write")`. İzin, `permission`/`permissions` claim'i ya
-  da boşlukla ayrılmış `scope`/`scp` claim'iyle verilir; Entra ID, Keycloak, Auth0 gibi tüm OIDC sağlayıcılarla
-  çalışır.
-- **`ICurrentUser`:** kullanıcı kimliğini `sub` claim'inden okur. Arka plan işlerinde (outbox) `null` döner.
-- **Geliştirme:** `dotnet user-jwts create --scope "orders:read" --scope "orders:write"` imzalama anahtarını user
-  secrets'a yazar; ek ayar gerekmez. Token'ın audience'ı servisin URL'idir, bu yüzden bir servisin token'ı
-  diğerinde 401 alır.
+- **JWT bearer:** settings are bound from the `Authentication:Schemes:Bearer` section (`Authority`,
+  `ValidAudiences`, `ValidIssuer`). With `MapInboundClaims = false` the `sub` and `scope` claims are kept as is.
+  Clock skew tolerance is 30 s.
+- **Secure by default:** the fallback policy requires an authenticated user. Health and OpenAPI endpoints are
+  explicitly marked `AllowAnonymous`.
+- **Permission-based authorization:** `RequirePermission("orders:write")`. A permission is granted through the
+  `permission`/`permissions` claim or the space-separated `scope`/`scp` claim; this works with any OIDC provider
+  such as Entra ID, Keycloak or Auth0.
+- **`ICurrentUser`:** reads the user id from the `sub` claim. Returns `null` in background work (outbox).
+- **Development:** `dotnet user-jwts create --scope "orders:read" --scope "orders:write"` writes the signing key to
+  user secrets; no extra configuration is needed. The token's audience is the service URL, so a token for one
+  service gets 401 from another.
 
-| Durum | Yanıt |
+| Situation | Response |
 | --- | --- |
-| Token yok ya da geçersiz | 401 |
-| Token geçerli, izin eksik | 403 |
-| Rate limit aşıldı | 429 + `Retry-After` |
-| İstek 30 sn'yi aştı | 504 |
+| No token or invalid token | 401 |
+| Valid token, missing permission | 403 |
+| Rate limit exceeded | 429 + `Retry-After` |
+| Request took longer than 30 s | 504 |
 
-### Saldırı yüzeyini azaltan önlemler
+### Attack surface reduction
 
-| Önlem | Değer |
+| Measure | Value |
 | --- | --- |
-| Güvenlik başlıkları | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin`, varsayılan `Cache-Control: no-store` |
-| Kestrel | `Server` başlığı kapalı, en fazla 10 MB gövde, en fazla 32 KB başlık |
-| CORS | Allow-list; liste boşsa cross-origin erişim yok. Metotlar ve başlıklar açıkça sınırlı |
-| Rate limiting | Fixed window, kullanıcı (`sub`) ya da istemci IP'si başına; varsayılan dakikada 100, kuyruk yok |
-| Correlation id | Yalnızca en fazla 64 karakterlik `[A-Za-z0-9_-]` kabul edilir; header ve log injection engellenir |
-| Hata detayı | 5xx yanıtlarında detay gizlenir; exception mesajı yalnızca Development'ta görünür |
-| DI doğrulaması | `ValidateScopes` ve `ValidateOnBuild` tüm ortamlarda açık |
+| Security headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin`, default `Cache-Control: no-store` |
+| Kestrel | `Server` header off, at most 10 MB body, at most 32 KB headers |
+| CORS | Allow-list; an empty list means no cross-origin access. Methods and headers are explicitly limited |
+| Rate limiting | Fixed window per user (`sub`) or client IP; 100 per minute by default, no queue |
+| Correlation id | Only `[A-Za-z0-9_-]` up to 64 characters is accepted; prevents header and log injection |
+| Error details | Hidden in 5xx responses; exception messages are only shown in Development |
+| DI validation | `ValidateScopes` and `ValidateOnBuild` on in every environment |
 
-### Hata yönetimi
+### Error handling
 
-`ApiResults.Problem(Error)` `ErrorType` değerini HTTP koduna eşler. Yanıt RFC 9457 biçimindedir ve `code`,
-`traceId`, `correlationId` ile `instance` alanlarını (örn. `POST /api/v1/orders`) taşır.
+`ApiResults.Problem(Error)` maps the `ErrorType` to an HTTP status. The response is RFC 9457 formatted and
+carries `code`, `traceId`, `correlationId` and `instance` (e.g. `POST /api/v1/orders`).
 
 | ErrorType | HTTP |
 | --- | --- |
-| Validation, Problem | 400 (Validation: alan bazında `errors`) |
+| Validation, Problem | 400 (Validation: per-field `errors`) |
 | Unauthorized | 401 |
 | Forbidden | 403 |
 | NotFound | 404 |
 | Conflict | 409 |
-| Failure | 500 (detay gizlenir) |
+| Failure | 500 (details hidden) |
 
-`GlobalExceptionHandler` beklenmeyen hataları yakalar: `ConcurrencyException` 409'a, `BadHttpRequestException`
-kendi koduna, istemci iptali 499'a, geri kalan her şey 500'e eşlenir.
+`GlobalExceptionHandler` catches unexpected errors: `ConcurrencyException` maps to 409, `BadHttpRequestException`
+to its own status, client cancellation to 499 and everything else to 500.
 
-### Endpoint'ler
+### Endpoints
 
-Her endpoint `IEndpoint` uygulayan `internal sealed` bir sınıftır ve assembly taramasıyla `api/v1` grubu altına
-otomatik eklenir. Üretilen servis şu uçları sunar:
+Each endpoint is an `internal sealed` class implementing `IEndpoint`, added automatically under the `api/v1` group
+by assembly scanning. The generated service exposes:
 
-| Metot | Yol | İzin | Başarı |
+| Method | Path | Permission | Success |
 | --- | --- | --- | --- |
 | POST | `/api/v1/orders` | `orders:write` | 201 + `Location` |
-| GET | `/api/v1/orders?search=&page=&pageSize=` | `orders:read` | 200, sayfalı |
+| GET | `/api/v1/orders?search=&page=&pageSize=` | `orders:read` | 200, paged |
 | GET | `/api/v1/orders/{id}` | `orders:read` | 200 |
 | PUT | `/api/v1/orders/{id}` | `orders:write` | 204 |
 | POST | `/api/v1/orders/{id}/archive` | `orders:write` | 204 |
 | DELETE | `/api/v1/orders/{id}` | `orders:write` | 204 (soft delete) |
-| GET | `/health/live`, `/health/ready` | anonim | 200 / 503 |
-| GET | `/openapi/v1.json` | anonim, Development | 200 |
+| GET | `/health/live`, `/health/ready` | anonymous | 200 / 503 |
+| GET | `/openapi/v1.json` | anonymous, Development | 200 |
 
-Health uçları rate limit dışındadır ve exception detayı içermeyen kısa bir JSON döner. `live` yalnızca process'i,
-`ready` ise veritabanı gibi `ready` etiketli kontrolleri doğrular. OpenAPI dokümanı Bearer güvenlik şemasını
-içerir; başka ortamlarda `OpenApi:Enabled` ile açılır.
+Health endpoints are excluded from rate limiting and return short JSON without exception details. `live` only
+checks the process; `ready` checks the `ready`-tagged checks such as the database. The OpenAPI document includes
+the Bearer security scheme; in other environments it is enabled with `OpenApi:Enabled`.
 
-## 10. Gözlemlenebilirlik
+## 10. Observability
 
-Log, trace ve metric üretimi `System.Diagnostics` üzerine kuruludur; bu yüzden paket gerektirmez. `--otel` ile
-oluşturulan servisler bunları OTLP üzerinden dışa aktarır.
+Logs, traces and metrics are built on `System.Diagnostics`, so no packages are required. Services generated with
+`--otel` export them over OTLP.
 
-### Loglama
+### Logging
 
-- **Biçim:** üretimde UTC zaman damgalı, scope'ları içeren JSON console formatter; Development'ta tek satırlık
-  simple formatter.
-- **Performans:** tüm loglar `[LoggerMessage]` source generator ile üretilir; çalışma zamanında boxing ya da mesaj
-  ayrıştırma yoktur. EventId aralıkları: 1000 behavior'lar, 2000 outbox ve persistence, 3000 web, 5000 servis.
-- **Scope'lar:** her istekte `CorrelationId`, her request'te `RequestName` loglara eklenir.
-- **Gizlilik:** request ve response payload'ları loglanmaz.
-- **Gürültü:** EF SQL logları varsayılan olarak `Warning` seviyesindedir. Development'ta `Information`'a
-  çekilebilir, ancak outbox poller her saniye sorgu loglar.
+- **Format:** JSON console formatter with UTC timestamps and scopes in production; single-line simple formatter in
+  Development.
+- **Performance:** all logs are generated with the `[LoggerMessage]` source generator; there is no boxing or message
+  parsing at runtime. EventId ranges: 1000 behaviors, 2000 outbox and persistence, 3000 web, 5000 service.
+- **Scopes:** `CorrelationId` is added to logs for every HTTP request and `RequestName` for every mediator request.
+- **Privacy:** request and response payloads are not logged.
+- **Noise:** EF SQL logs are at `Warning` by default. They can be raised to `Information` in Development, but the
+  outbox poller then logs a query every second.
 
 ### Correlation id
 
-`X-Correlation-ID` istekte geçerliyse kullanılır; değilse W3C trace id'si alınır. Değer
-`HttpContext.TraceIdentifier`'a, aktif span'e, log scope'una, yanıt başlığına ve ProblemDetails'e yazılır.
+`X-Correlation-ID` is used if it is valid in the request; otherwise the W3C trace id is used. The value is written
+to `HttpContext.TraceIdentifier`, the current span, the log scope, the response header and ProblemDetails.
 
-### Tracing ve metrikler
+### Tracing and metrics
 
-| Ad | Tür | Etiketler |
+| Name | Kind | Tags |
 | --- | --- | --- |
-| `BuildingBlocks.Application` | ActivitySource: request başına bir span | `app.request.name`, `app.request.kind`, `app.error.code` |
+| `BuildingBlocks.Application` | ActivitySource: one span per request | `app.request.name`, `app.request.kind`, `app.error.code` |
 | `application.request.duration` | Histogram (ms) | `request`, `kind` (command/query), `outcome` (success/failure/exception) |
 | `application.request.failures` | Counter | `request`, `error.type` |
 
 ### OpenTelemetry (`--otel`)
 
-- **Trace:** ASP.NET Core (`/health` hariç), HttpClient, `BuildingBlocks.Application` ve uygulama adıyla açılan
-  source'lar.
-- **Metric:** ASP.NET Core, HttpClient, runtime ve `BuildingBlocks.Application` meter'ı.
-- **Log:** formatlanmış mesaj ve scope'larla OpenTelemetry log sağlayıcısı.
-- **Export:** `OTEL_EXPORTER_OTLP_ENDPOINT` tanımlıysa OTLP'ye gönderilir. Jaeger, Tempo, Grafana, Seq, Aspire
-  dashboard ve Azure Monitor ile çalışır.
+- **Traces:** ASP.NET Core (excluding `/health`), HttpClient, `BuildingBlocks.Application` and sources named after
+  the application.
+- **Metrics:** ASP.NET Core, HttpClient, runtime and the `BuildingBlocks.Application` meter.
+- **Logs:** OpenTelemetry log provider with formatted messages and scopes.
+- **Export:** sent over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Works with Jaeger, Tempo, Grafana, Seq, the
+  Aspire dashboard and Azure Monitor.
 
-## 11. Yapılandırma referansı
+## 11. Configuration reference
 
-Tüm ayarlar `appsettings.json` ile environment değişkenlerinden okunur. Environment değişkenlerinde `:` yerine
-`__` kullanılır (`ConnectionStrings__OrderDb`). Sırlar asla `appsettings.json`'a yazılmaz.
+All settings are read from `appsettings.json` and environment variables. Environment variables use `__` instead of
+`:` (`ConnectionStrings__OrderDb`). Secrets are never written to `appsettings.json`.
 
-| Anahtar | Varsayılan | Development | Açıklama |
+| Key | Default | Development | Description |
 | --- | --- | --- | --- |
-| `ConnectionStrings:<Servis>Db` | yok (zorunlu) | yerel docker | Veritabanı bağlantısı |
-| `Authentication:Schemes:Bearer:Authority` | yok | `user-jwts` | OIDC sağlayıcısı |
-| `Authentication:Schemes:Bearer:ValidAudiences` | `["<servis>-api"]` | localhost URL'leri | Kabul edilen audience'lar |
-| `Cors:AllowedOrigins` | `[]` | `http://localhost:3000` | Tarayıcı origin allow-list'i |
+| `ConnectionStrings:<Service>Db` | none (required) | local docker | Database connection |
+| `Authentication:Schemes:Bearer:Authority` | none | `user-jwts` | OIDC provider |
+| `Authentication:Schemes:Bearer:ValidAudiences` | `["<service>-api"]` | localhost URLs | Accepted audiences |
+| `Cors:AllowedOrigins` | `[]` | `http://localhost:3000` | Browser origin allow-list |
 | `RateLimiting:Enabled` | `true` | — | Global limiter |
-| `RateLimiting:PermitLimit` | `100` | — | Pencere ve çağıran başına izin (1–1.000.000) |
-| `RateLimiting:Window` | `00:01:00` | — | Pencere süresi (1 sn–1 sa) |
-| `Outbox:Enabled` | `true` | — | Outbox işleyicisi |
-| `Outbox:PollingInterval` | `00:00:05` | `00:00:01` | Sorgulama aralığı |
-| `Outbox:BatchSize` | `50` | — | Parti boyutu (1–1000) |
-| `Outbox:MaxAttempts` | `5` | — | Poison message eşiği |
-| `Database:ApplyMigrationsOnStartup` | `false` | `true` | Başlangıçta migration uygula |
+| `RateLimiting:PermitLimit` | `100` | — | Permits per window and caller (1–1,000,000) |
+| `RateLimiting:Window` | `00:01:00` | — | Window length (1 s–1 h) |
+| `Outbox:Enabled` | `true` | — | Outbox processor |
+| `Outbox:PollingInterval` | `00:00:05` | `00:00:01` | Polling interval |
+| `Outbox:BatchSize` | `50` | — | Batch size (1–1000) |
+| `Outbox:MaxAttempts` | `5` | — | Poison message threshold |
+| `Database:ApplyMigrationsOnStartup` | `false` | `true` | Apply migrations on startup |
 | `OpenApi:Enabled` | `false` | `true` | `/openapi/v1.json` |
-| `AllowedHosts` | `*` | — | Üretimde gerçek host adlarıyla kısıtlanmalı |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | yok | — | `--otel` ile OTLP hedefi |
-| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | yok | — | Reverse proxy arkasında `true` |
+| `AllowedHosts` | `*` | — | Should be restricted to the real host names in production |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none | — | OTLP target with `--otel` |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | none | — | `true` behind a reverse proxy |
 
-`RateLimiting` ve `Outbox` options'ları DataAnnotations ile başlangıçta doğrulanır; geçersiz bir değer
-uygulamanın açılmasını engeller. Ayarlar `IOptions` ile lazy bağlandığı için testlerde ve farklı ortamlarda
-güvenle ezilebilir.
+The `RateLimiting` and `Outbox` options are validated with DataAnnotations at startup; an invalid value prevents
+the application from starting. Settings are bound lazily through `IOptions`, so they can be safely overridden in
+tests and different environments.
 
-## 12. Test stratejisi
+## 12. Testing strategy
 
-Tek servisli bir solution 54 testle gelir; her ek servis 28 test ekler. Tüm testler MSTest 4 ve
-Microsoft.Testing.Platform üzerinde çalışır, mock kütüphanesi kullanılmaz; sahte nesneler elle yazılır.
+A single-service solution comes with 54 tests; each additional service adds 28. All tests run on MSTest 4 and
+Microsoft.Testing.Platform without a mocking library; fakes are written by hand.
 
-| Proje | Test sayısı | Kapsam |
+| Project | Tests | Coverage |
 | --- | --- | --- |
-| `BuildingBlocks.Tests` | 26 | Pipeline sırası, kısıtı uymayan behavior'ın atlanması, validation kısa devresi, cache'in yalnızca başarıyı saklaması, cache invalidation'ın yalnızca başarıdan sonra çalışması, idempotency (kullanıcı + anahtar başına tekrar, hataların saklanmaması, eşzamanlı kopyaların birleşmesi), duplicate handler tespiti, validator kuralları, Result ve JSON round-trip. Persistence testleri gerçek EF Core hattını (interceptor'lar, query filter, concurrency token) in-memory SQLite üzerinde çalıştırır: soft delete, auditing, eşzamanlı güncelleme, outbox'ın aynı transaction'da yazılması ve outbox işleyicisinin yeniden deneme, `MaxAttempts` ve tip allowlist davranışı |
-| `<Servis>.UnitTests` | 9 | Aggregate invariant'ları ve event'leri, handler'lar (`FakeOrderRepository` ile), validator'lar |
-| `<Servis>.ArchitectureTests` | 9 | Katman bağımlılıkları ve konvansiyonlar (reflection ile) |
-| `<Servis>.IntegrationTests` | 10 | Gerçek HTTP pipeline'ı uçtan uca |
+| `BuildingBlocks.Tests` | 26 | Pipeline order, skipping behaviors whose constraints do not match, validation short-circuit, caching only successes, cache invalidation only after success, idempotency (replay per user + key, failures not stored, concurrent duplicates coalesced), duplicate handler detection, validator rules, Result and JSON round-trip. Persistence tests run the real EF Core pipeline (interceptors, query filters, concurrency tokens) on in-memory SQLite: soft delete, auditing, concurrent updates, outbox rows written in the same transaction, and the outbox processor's retry, `MaxAttempts` and type allowlist behavior |
+| `<Service>.UnitTests` | 9 | Aggregate invariants and events, handlers (with `FakeOrderRepository`), validators |
+| `<Service>.ArchitectureTests` | 9 | Layer dependencies and conventions (via reflection) |
+| `<Service>.IntegrationTests` | 10 | The real HTTP pipeline end to end |
 
-### Mimari kurallar
+### Architecture rules
 
-- **Domain:** Application, Infrastructure, Persistence, API, Contracts ile EF Core, ASP.NET Core ve
-  `Microsoft.Extensions` paketlerine bağlı olamaz.
-- **Application:** Infrastructure, Persistence, API, EF Core ve ASP.NET Core'a bağlı olamaz.
-- **Persistence ve Infrastructure:** API'ye bağlı olamaz; Persistence ASP.NET Core'a da bağlı olamaz.
-- **Contracts:** framework dışında hiçbir assembly'ye bağlı olamaz.
-- **Handler, validator ve endpoint'ler:** `internal sealed` olmalıdır.
-- **Domain event'ler:** `sealed record` olmalıdır.
-- **Aggregate'ler:** `sealed` olmalı, public setter ve public constructor içermemelidir.
-- Her kural en az bir tiple eşleşmek zorundadır. Bu sayede bozulan bir seçici kuralı sessizce geçersiz kılamaz.
+- **Domain:** must not depend on Application, Infrastructure, Persistence, API, Contracts, EF Core, ASP.NET Core or
+  `Microsoft.Extensions` packages.
+- **Application:** must not depend on Infrastructure, Persistence, API, EF Core or ASP.NET Core.
+- **Persistence and Infrastructure:** must not depend on the API; Persistence must not depend on ASP.NET Core
+  either.
+- **Contracts:** must not depend on any assembly outside the framework.
+- **Handlers, validators and endpoints:** must be `internal sealed`.
+- **Domain events:** must be `sealed record`.
+- **Aggregates:** must be `sealed` and have no public setters or public constructors.
+- Every rule must match at least one type, so a broken selector cannot silently disable a rule.
 
-### Entegrasyon testleri
+### Integration tests
 
-`<Servis>ApiFactory` gerçek API'yi `WebApplicationFactory<Program>` ile bellekte ayağa kaldırır:
+`<Service>ApiFactory` boots the real API in memory with `WebApplicationFactory<Program>`:
 
-- **Veritabanı:** seçilen sağlayıcıdan bağımsız olarak geçici bir SQLite dosyası kullanılır. DbContext kaydı
-  (`DbContextOptions` ve `IDbContextOptionsConfiguration`) değiştirilir, interceptor'lar korunur ve şema
-  `EnsureCreated` ile oluşturulur.
-- **Kimlik:** test içinde üretilen simetrik anahtarlı JWT kullanılır. `CreateClientWithPermissions(...)` istenen
-  izinlerle istemci verir.
-- **Ortam:** `Testing` ortamında 200 ms outbox aralığı ve yüksek rate limit kullanılır. Tek host tüm assembly
-  için paylaşılır; testler benzersiz verilerle birbirinden yalıtılır.
+- **Database:** a temporary SQLite file is used regardless of the selected provider. The DbContext registration
+  (`DbContextOptions` and `IDbContextOptionsConfiguration`) is replaced, the interceptors are kept and the schema is
+  created with `EnsureCreated`.
+- **Identity:** JWTs signed with a symmetric key created in the test are used. `CreateClientWithPermissions(...)`
+  returns a client with the requested permissions.
+- **Environment:** the `Testing` environment uses a 200 ms outbox interval and a high rate limit. A single host is
+  shared by the whole assembly; tests are isolated by unique data.
 
-Kapsanan senaryolar:
+Covered scenarios:
 
-- Oluştur → oku → güncelle (cache'in temizlendiği doğrulanır) → sil → 404.
-- Arama ve sayfalama.
-- Validation ProblemDetails, 409 çakışma ve hata kodu.
-- Aynı `Idempotency-Key` ile tek çalışma.
-- Outbox mesajının işlenmesi.
-- 401, 403, güvenlik başlıkları, correlation id ve `Server` başlığının olmaması.
-- Readiness'ın veritabanını kontrol etmesi.
+- Create → read → update (verifying the cache is cleared) → delete → 404.
+- Search and paging.
+- Validation ProblemDetails, 409 conflict and error code.
+- A single execution for the same `Idempotency-Key`.
+- Processing of the outbox message.
+- 401, 403, security headers, correlation id and the absence of the `Server` header.
+- Readiness checking the database.
 
-SQLite, sağlayıcıya özel davranışları (collation, lock, SQL Server ve Postgres tipleri) test etmez. Bunlar için
-CI'da gerçek veritabanıyla ayrı bir suite önerilir.
+SQLite does not test provider-specific behavior (collation, locking, SQL Server and Postgres types). A separate
+suite against a real database in CI is recommended for those.
 
 ```bash
-dotnet test                                   # tüm testler
+dotnet test                                   # all tests
 dotnet test --project src/Services/OrderService/tests/Order.UnitTests
 ```
 
-## 13. Build, Docker ve CI/CD
+## 13. Build, Docker and CI/CD
 
-Her servisin kendi Dockerfile'ı vardır; build context solution köküdür. CI her push'ta derler, test eder ve
-imajları üretir.
+Each service has its own Dockerfile; the build context is the solution root. CI builds, tests and produces the
+images on every push.
 
-### Docker imajı
+### Docker image
 
-- **Build:** iki aşamalıdır. `sdk:10.0` ile restore ve publish yapılır; NuGet cache'i BuildKit mount'u ile
-  `sharing=locked` modunda paylaşılır, böylece paralel imaj build'leri çakışmaz.
-- **Çalışma zamanı:** `aspnet:10.0-noble-chiseled-extra`. Shell ve paket yöneticisi yoktur, varsayılan olarak
-  root olmayan `app` kullanıcısıyla çalışır. `-extra` varyantı veritabanı sürücülerinin ihtiyaç duyduğu ICU ve
-  tzdata'yı içerir.
-- **Port:** uygulama 8080'de HTTP dinler; TLS reverse proxy ya da ingress'te sonlanır.
-- **SQLite varyantı:** imajda `app` kullanıcısına ait bir `/data` dizini oluşturulur.
+- **Build:** two stages. Restore and publish run on `sdk:10.0`; the NuGet cache is shared through a BuildKit mount
+  with `sharing=locked`, so parallel image builds do not collide.
+- **Runtime:** `aspnet:10.0-noble-chiseled-extra`. No shell or package manager; runs as the non-root `app` user by
+  default. The `-extra` variant includes the ICU and tzdata that database drivers need.
+- **Port:** the application listens on HTTP 8080; TLS terminates at the reverse proxy or ingress.
+- **SQLite variant:** a `/data` directory owned by the `app` user is created in the image.
 
 ```bash
 docker build -f src/Services/OrderService/Dockerfile -t order-api .
-docker compose up --build     # API + veritabanı
+docker compose up --build     # APIs + database
 ```
 
-Compose iki katmandır:
+Compose has two layers:
 
-- `src/Services/<Ad>Service/compose.yaml`: servisin API'si. Her servis kendi dosyasını getirir, `--service-only`
-  ile de üretilir.
-- Kökteki `docker-compose.yml`: servis dosyalarını `include` ile toplar ve sağlık kontrollü **tek bir veritabanı
-  sunucusu** (`db`) tanımlar. Her servis bu sunucuda kendi veritabanını kullanır ve açılışta oluşturur; böylece
-  `localhost:5432` / `1433` portları servisler arasında çakışmaz ve `appsettings.Development.json` olduğu gibi
-  çalışır. SQLite varyantında sunucu yoktur, her servis kendi volume'unu kullanır.
+- `src/Services/<Name>Service/compose.yaml`: the service's API. Every service brings its own file, also when
+  generated with `--service-only`.
+- The root `docker-compose.yml`: collects the service files with `include` and defines **one shared database
+  server** (`db`) with a health check. Each service uses its own database on that server and creates it on
+  startup, so the `localhost:5432` / `1433` ports do not collide between services and `appsettings.Development.json`
+  works as is. The SQLite variant has no server; each service uses its own volume.
 
-`dotnet user-jwts` anahtarları user secrets klasöründen salt okunur olarak container'a bağlanır; yerel token'lar
-container'da da geçerli olur.
+The `dotnet user-jwts` keys are mounted read-only from the user secrets folder into the container, so local tokens
+are valid in the container too.
 
 ### CI (`.github/workflows/ci.yml`)
 
-1. SDK `global.json`'dan kurulur.
+1. The SDK is installed from `global.json`.
 2. `dotnet restore`.
-3. Açıklı paket kontrolü: `dotnet list package --vulnerable --include-transitive`; herhangi bir bulgu build'i kırar.
-4. `dotnet format whitespace --verify-no-changes`. Kod stili (IDE kuralları) zaten build'de zorlanır;
-   `dotnet format style` kullanılmaz, çünkü `using` sıralamasını da denetler ve şablondaki sıralama servis adına
-   bağlıdır (`Basket`, `Catalog` gibi adlar `Microsoft.*`'tan önce sıralanır).
-5. Release build (uyarılar hata sayılır).
+3. Vulnerable package check: `dotnet list package --vulnerable --include-transitive`; any finding fails the build.
+4. `dotnet format whitespace --verify-no-changes`. Code style (IDE rules) is already enforced by the build;
+   `dotnet format style` is not used because it also checks `using` order, and the template's order depends on the
+   service name (names such as `Basket` or `Catalog` sort before `Microsoft.*`).
+5. Release build (warnings are errors).
 6. `dotnet test`.
-7. `docker compose config` ile compose doğrulaması ve `src/Services/*/Dockerfile` ile bulunan her servisin imaj
-   build'i. Yeni servis için CI'da değişiklik gerekmez.
+7. Compose validation with `docker compose config` and an image build for every service found by
+   `src/Services/*/Dockerfile`. No CI change is needed for a new service.
 
-Workflow yalnızca `contents: read` iznine sahiptir. Aynı dal için eski çalışmalar iptal edilir. Kullanılan
-action'lar tag yerine commit SHA ile sabitlenir (sürüm yanında yorum olarak yazar); bir tag'in sonradan başka bir
-commit'e taşınması pipeline'ı etkilemez.
+The workflow only has the `contents: read` permission. Older runs for the same branch are cancelled. Actions are
+pinned by commit SHA instead of a tag (with the version as a comment), so a tag moved to another commit later does
+not affect the pipeline.
 
-### Bağımlılık güncellemeleri (`.github/dependabot.yml`)
+### Dependency updates (`.github/dependabot.yml`)
 
-Dependabot her hafta NuGet paketleri (`Directory.Packages.props`, `dotnet-tools.json`), GitHub Actions ve
-servislerin Docker base imajları için PR açar. Minor ve patch güncellemeleri tek PR'da gruplanır; major
-güncellemeler ayrı PR olarak gelir. SHA ile sabitlenmiş action'lar da bu şekilde güncel kalır.
+Every week Dependabot opens PRs for NuGet packages (`Directory.Packages.props`, `dotnet-tools.json`), GitHub
+Actions and the services' Docker base images. Minor and patch updates are grouped into one PR; major updates come
+as separate PRs. SHA-pinned actions are kept up to date this way too.
 
-### Üretime geçiş kontrol listesi
+### Production readiness checklist
 
-- [ ] `AllowedHosts`, `Cors:AllowedOrigins`, JWT `Authority` ve `ValidAudiences` ayarlandı
-- [ ] Connection string ve sırlar environment değişkeni ya da vault üzerinden veriliyor
-- [ ] Migration oluşturuldu ve pipeline'da migration bundle ile uygulanıyor
-- [ ] `Database:ApplyMigrationsOnStartup` ve `OpenApi:Enabled` kapalı
-- [ ] Birden çok instance varsa dağıtık L2 cache kayıtlı (idempotency için zorunlu)
-- [ ] Servisler arası event'ler için broker tabanlı `IEventBus` uygulaması var
-- [ ] Outbox işleyici tek instance'ta çalışıyor ya da sağlayıcıya özel satır kilidi eklendi
-- [ ] Reverse proxy arkasında `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`
-- [ ] Liveness probe `/health/live`, readiness probe `/health/ready` olarak ayarlandı
-- [ ] Rate limit değerleri gerçek trafiğe göre ayarlandı
+- [ ] `AllowedHosts`, `Cors:AllowedOrigins`, JWT `Authority` and `ValidAudiences` are configured
+- [ ] Connection strings and secrets come from environment variables or a vault
+- [ ] A migration exists and is applied in the pipeline with a migration bundle
+- [ ] `Database:ApplyMigrationsOnStartup` and `OpenApi:Enabled` are off
+- [ ] With multiple instances, a distributed L2 cache is registered (required for idempotency)
+- [ ] A broker-based `IEventBus` implementation exists for events between services
+- [ ] The outbox processor runs on a single instance, or a provider-specific row lock has been added
+- [ ] `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` behind a reverse proxy
+- [ ] The liveness probe is `/health/live` and the readiness probe is `/health/ready`
+- [ ] Rate limits are tuned to real traffic
 
-## 14. Geliştirici rehberi
+## 14. Developer guide
 
-Yeni bir özellik dört katmanda, içten dışa doğru eklenir. Mimari testler yanlış yöne atılan bir bağımlılığı
-derleme sırasında yakalar.
+A new feature is added in four layers, from the inside out. Architecture tests catch a dependency added in the
+wrong direction.
 
-### Yeni use case (örnek: siparişi onaylama)
+### New use case (example: confirming an order)
 
-1. **Domain:** aggregate'e `Confirm()` metodunu, invariant kontrolünü, `OrderConfirmedDomainEvent`'i ve
-   `OrderErrors`'a yeni hatayı ekleyin. Gerekirse `OrderStatus`'a değer ekleyin.
-2. **Application:** `Orders/Confirm/ConfirmOrderCommand.cs` dosyasında `ConfirmOrderCommand : ICommand,
-   ICacheInvalidator`, validatorını ve handlerını `internal sealed` olarak yazın. Handler `SaveChanges` çağırmaz.
-3. **API:** `Endpoints/Orders/ConfirmOrder.cs` içinde `IEndpoint` uygulayın;
-   `RequirePermission(OrderPermissions.Write)` ekleyin ve `result.Match(Results.NoContent, ApiResults.Problem)`
-   dönün. Endpoint otomatik keşfedilir.
-4. **Persistence:** şema değiştiyse EF konfigürasyonunu güncelleyip `dotnet ef migrations add ConfirmOrder`
-   çalıştırın.
-5. **Testler:** aggregate için unit test, handler için elle yazılmış fake ile test ve uç için entegrasyon testi
-   ekleyin.
-6. Event'e tepki gerekiyorsa Application'da `IDomainEventHandler<OrderConfirmedDomainEvent>` yazın. Handler
-   idempotent olmalıdır.
+1. **Domain:** add the `Confirm()` method, its invariant check and `OrderConfirmedDomainEvent` to the aggregate,
+   and the new error to `OrderErrors`. Add a value to `OrderStatus` if needed.
+2. **Application:** in `Orders/Confirm/ConfirmOrderCommand.cs`, write `ConfirmOrderCommand : ICommand,
+   ICacheInvalidator` with its validator and handler as `internal sealed`. The handler does not call `SaveChanges`.
+3. **API:** implement `IEndpoint` in `Endpoints/Orders/ConfirmOrder.cs`; add
+   `RequirePermission(OrderPermissions.Write)` and return `result.Match(Results.NoContent, ApiResults.Problem)`. The
+   endpoint is discovered automatically.
+4. **Persistence:** if the schema changed, update the EF configuration and run
+   `dotnet ef migrations add ConfirmOrder`.
+5. **Tests:** add a unit test for the aggregate, a handler test with a hand-written fake and an integration test for
+   the endpoint.
+6. If the event needs a reaction, write an `IDomainEventHandler<OrderConfirmedDomainEvent>` in Application. The
+   handler must be idempotent.
 
-### Yeni okuma ucu
+### New read endpoint
 
-`IOrderReadRepository`'ye `AsNoTracking` ile projeksiyon yapan bir metot ekleyin. Query'yi `ICachedQuery<T>`
-olarak tanımlayın, anahtarını `OrderCacheKeys`'e yazın ve aggregate tag'ini kullanın. Bu tag'i temizleyen mevcut
-komutlar yeni cache girdisini de otomatik geçersiz kılar.
+Add a method to `IOrderReadRepository` that projects with `AsNoTracking`. Define the query as `ICachedQuery<T>`,
+put its key in `OrderCacheKeys` and use the aggregate tag. Existing commands that clear this tag automatically
+invalidate the new cache entry as well.
 
-### Yeni servis
+### New service
 
 ```bash
 dotnet new onion -n Payment --service-only -o .
 ```
 
-Sonrasında:
+Then:
 
-- `src/Services/PaymentService/compose.yaml` satırını `docker-compose.yml`'ın `include` listesine ekleyin
-  (`create_project.sh` bunu kendisi yapar). CI yeni servisin imajını otomatik build eder.
-- Yeni servis farklı bir DB sağlayıcısı kullanıyorsa paket sürümünü `Directory.Packages.props`'a, veritabanı
-  sunucusunu `docker-compose.yml`'a ekleyin.
+- Add `src/Services/PaymentService/compose.yaml` to the `include` list in `docker-compose.yml`
+  (`create_project.sh` does this for you). CI builds the new service's image automatically.
+- If the new service uses a different database provider, add its package version to `Directory.Packages.props` and
+  its database server to `docker-compose.yml`.
 
-### Yeni cross-cutting davranış
+### New cross-cutting behavior
 
-`IPipelineBehavior<TRequest, TResponse>` uygulayan açık generic bir sınıf yazın. Hangi request'lere
-uygulanacağını generic kısıtlarla belirleyin (örn. `where TRequest : IAuditedCommand`) ve sıradaki yerine göre
-`AddBuildingBlocksApplication` içinde `AddOpenBehavior` ile kaydedin.
+Write an open generic class implementing `IPipelineBehavior<TRequest, TResponse>`. Use generic constraints to
+decide which requests it applies to (e.g. `where TRequest : IAuditedCommand`) and register it with
+`AddOpenBehavior` in `AddBuildingBlocksApplication` at the right position.
 
-### Yeni validation kuralı
+### New validation rule
 
 ```csharp
 public static IRuleBuilder<T, string?> Iban<T>(this IRuleBuilder<T, string?> rule) =>
     rule.Must((_, v) => v is null || IbanChecker.IsValid(v), "'{PropertyName}' is not a valid IBAN.", "Iban");
 ```
 
-## 15. Bilinen sınırlar ve yol haritası
+## 15. Known limitations and roadmap
 
-Aşağıdaki sınırlar bilinçli tercihlerdir; her biri açık bir genişleme noktası bırakır.
+The limitations below are deliberate choices; each leaves a clear extension point.
 
-| Konu | Mevcut durum | Önerilen genişleme |
+| Topic | Current state | Suggested extension |
 | --- | --- | --- |
-| Outbox ölçekleme | Birden çok instance aynı mesajı işleyebilir | `FOR UPDATE SKIP LOCKED` (Postgres) / `READPAST` (SQL Server) ya da tek worker |
-| Event bus | Process içi `Channel` | RabbitMQ, Kafka ya da Azure Service Bus uygulaması; tüketici tarafında inbox tablosu |
-| Dağıtık cache | Yalnızca L1 bellek | Redis `IDistributedCache` (üçüncü parti) |
-| Benzersizlik | Uygulama seviyesinde isim kontrolü | Sağlayıcıya özel filtreli unique index |
-| Arama | `UPPER(...) LIKE`, index kullanmaz | Normalleştirilmiş kolon ya da full-text arama |
-| API versiyonlama | Route grubu (`/api/v1`) | Yeni sürüm için ayrı grup; `Asp.Versioning` dış paket |
-| Entegrasyon testi | SQLite | CI'da gerçek veritabanıyla ek suite |
-| Resilience | Yalnızca EF retry | Giden HTTP için `Microsoft.Extensions.Http.Resilience` (Polly'ye bağlıdır) |
-| Native AOT | Desteklenmez (reflection ile tarama) | Source generator ile handler ve endpoint kaydı |
-| Docker Compose | `--service-only` tek başına `include` listesini güncellemez (`create_project.sh` günceller) | Tek satır elle ekleme; ileride şablon post-action'ı |
+| Outbox scaling | Multiple instances may process the same message | `FOR UPDATE SKIP LOCKED` (Postgres) / `READPAST` (SQL Server) or a single worker |
+| Event bus | In-process `Channel` | RabbitMQ, Kafka or Azure Service Bus implementation; inbox table on the consumer side |
+| Distributed cache | L1 memory only | Redis `IDistributedCache` (third-party) |
+| Uniqueness | Application-level name check | Provider-specific filtered unique index |
+| Search | `UPPER(...) LIKE`, does not use an index | Normalized column or full-text search |
+| API versioning | Route group (`/api/v1`) | Separate group for a new version; `Asp.Versioning` external package |
+| Integration tests | SQLite | Additional suite against a real database in CI |
+| Resilience | EF retry only | `Microsoft.Extensions.Http.Resilience` for outgoing HTTP (depends on Polly) |
+| Native AOT | Not supported (reflection-based scanning) | Handler and endpoint registration with a source generator |
+| Docker Compose | `--service-only` alone does not update the `include` list (`create_project.sh` does) | One line added by hand; a template post-action in the future |
 
-## 16. Şablon üzerinde geliştirme
+## 16. Working on the template
 
-### Repo yapısı
+### Repository layout
 
 ```text
 onion_template/
 ├── .github/
-│   ├── dependabot.yml       # Bu repo'nun action'ları ve şablonun paket/imaj sürümleri
+│   ├── dependabot.yml       # This repository's actions and the template's package/image versions
 │   └── workflows/
-│       ├── template-ci.yml  # Şablonun kendi CI'ı: pack + tüm varyantlar + çoklu servis
-│       └── release.yml      # v* tag'inde NuGet.org'a yayın
-├── templates/onion/         # Şablonun kendisi: üretilen solution'ın birebir kaynağı
-│   ├── .template.config/    # dotnet new tanımı (parametreler, koşullar, post-action'lar)
-│   └── .github/             # Üretilen solution'ın CI'ı ve Dependabot'u (bu repo'da çalışmaz)
-├── Onion.Templates.csproj   # templates/** klasörünü NuGet şablon paketine çevirir
-├── create_project.sh        # Tek komutla solution + birden çok servis üretir
+│       ├── template-ci.yml  # The template's own CI: pack + all variants + multiple services
+│       └── release.yml      # Publishes to NuGet.org on v* tags
+├── templates/onion/         # The template itself: the exact source of the generated solution
+│   ├── .template.config/    # dotnet new definition (parameters, conditions, post-actions)
+│   └── .github/             # CI and Dependabot of the generated solution (not run in this repository)
+├── Onion.Templates.csproj   # Packs templates/** into a NuGet template package
+├── create_project.sh        # Creates a solution with several services in one command
 └── README.md
 ```
 
-Şablona ait her şey `templates/onion` altındadır; kökte yalnızca paketleme, CI ve yardımcı script bulunur.
+Everything that belongs to the template lives under `templates/onion`; the root only holds packaging, CI and the
+helper script.
 
-### Derleme ve doğrulama
+### Build and verify
 
-`templates/onion` klasörü doğrudan derlenebilir ve test edilebilir bir solution'dır:
+The `templates/onion` folder is a solution that can be built and tested directly:
 
 ```bash
 cd templates/onion
 dotnet build SolutionName.slnx && dotnet test --solution SolutionName.slnx
 ```
 
-Değişiklikten sonra farklı varyantları üretip doğrulayın:
+After a change, generate and verify different variants:
 
 ```bash
 dotnet new onion -n Order -o /tmp/Order && (cd /tmp/Order && dotnet test)
@@ -961,22 +964,23 @@ dotnet new onion -n Basket --database postgres --otel -o /tmp/Basket && (cd /tmp
 
 ### CI (`.github/workflows/template-ci.yml`)
 
-Her push ve PR'da şablon paketlenir, sonra paketten üretilen çıktılar üretilen solution'ın kendi kontrolleriyle
-doğrulanır:
+On every push and PR the template is packed, and the outputs generated from the package are verified with the
+generated solution's own checks:
 
-- **Varyant matrisi:** `--database` (`sqlserver`, `postgres`, `sqlite`) × `--otel`, toplam 6 iş. Servis adı
-  `Basket`'tir; `BuildingBlocks` ve `Microsoft`'tan önce sıralandığı için ada bağlı sorunları yakalar. Her işte
-  format kontrolü, Release build, testler ve `docker compose config`.
-- **Çoklu servis:** `create_project.sh ECommerce Order Basket -- --database postgres`; build, test, compose'da iki
-  API olduğunun kontrolü ve her servisin Docker imajı.
+- **Variant matrix:** `--database` (`sqlserver`, `postgres`, `sqlite`) × `--otel`, 6 jobs in total. The service name
+  is `Basket`; it sorts before `BuildingBlocks` and `Microsoft`, which catches name-dependent issues. Each job runs
+  the format check, a Release build, the tests and `docker compose config`.
+- **Multiple services:** `create_project.sh ECommerce Order Basket -- --database postgres`; build, tests, a check
+  that compose contains two APIs, and a Docker image for each service.
 
-### Yayınlama (`.github/workflows/release.yml`)
+### Releasing (`.github/workflows/release.yml`)
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+git tag -a v1.1.0 -m "OnionArchitecture.Templates 1.1.0" && git push origin v1.1.0
 ```
 
-Tag push'u önce `template-ci`'ı çalıştırır, geçerse paketi tag'deki sürümle (`v` olmadan) üretip NuGet.org'a
-gönderir. Gereken tek ayar `NUGET_API_KEY` secret'ıdır; workflow `nuget` environment'ını kullanır, böylece
-GitHub'da bu environment'a onay kuralı eklenerek yayın elle onaylanabilir. Aynı sürüm tekrar gönderilirse
-`--skip-duplicate` ile atlanır. `Onion.Templates.csproj`'daki `1.0.0` yalnızca yerel pack için varsayılandır.
+A tag push first runs `template-ci`; if it passes, the package is built with the tag's version (without the `v`) and
+pushed to NuGet.org. The only setting required is the `NUGET_API_KEY` secret of the `nuget` environment; adding a
+required reviewer to that environment in GitHub makes every release wait for manual approval. Pushing the same
+version again is skipped with `--skip-duplicate`. The `1.0.0` in `Onion.Templates.csproj` is only the default for
+local packs.

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Bir solution ve içinde bir veya daha fazla servis oluşturur.
+# Creates a solution with one or more services.
 #
-#   ./create_project.sh <SolutionAdı> <Servis1> [Servis2 ...] [-- dotnet new ek parametreleri]
+#   ./create_project.sh <SolutionName> <Service1> [Service2 ...] [-- extra dotnet new arguments]
 #   ./create_project.sh ECommerce Order Basket Payment
 #   ./create_project.sh ECommerce Order Basket -- --database postgres --otel
 #
-# İlk servis solution'ı (BuildingBlocks, ortak ayarlar, docker-compose...) ile birlikte oluşturur,
-# sonraki servisler --service-only ile aynı solution'a ve docker-compose.yml'ın include listesine eklenir.
+# The first service is created together with the solution (BuildingBlocks, shared settings, docker-compose...);
+# the following services are added with --service-only to the same solution and to the include list of
+# docker-compose.yml.
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
-    echo "Kullanım: $0 <SolutionAdı> <Servis1> [Servis2 ...] [-- ek parametreler]" >&2
+    echo "Usage: $0 <SolutionName> <Service1> [Service2 ...] [-- extra arguments]" >&2
     exit 1
 fi
 
@@ -26,16 +27,16 @@ done
 EXTRA_ARGS=("$@")
 
 if [ -e "$SOLUTION_NAME" ]; then
-    echo "'$SOLUTION_NAME' zaten var, üzerine yazılmayacak." >&2
+    echo "'$SOLUTION_NAME' already exists and will not be overwritten." >&2
     exit 1
 fi
 
 FIRST="${SERVICES[0]}"
-echo "Solution oluşturuluyor: $SOLUTION_NAME (ilk servis: $FIRST)"
+echo "Creating solution: $SOLUTION_NAME (first service: $FIRST)"
 dotnet new onion -n "$FIRST" -o "$SOLUTION_NAME" --solution-name "$SOLUTION_NAME" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 
 for SERVICE_NAME in "${SERVICES[@]:1}"; do
-    echo "Servis ekleniyor: $SERVICE_NAME"
+    echo "Adding service: $SERVICE_NAME"
     (cd "$SOLUTION_NAME" && dotnet new onion -n "$SERVICE_NAME" --service-only -o . ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"})
 
     # Template post-actions run with continueOnError; make sure the projects really are in the solution.
@@ -51,10 +52,10 @@ for SERVICE_NAME in "${SERVICES[@]:1}"; do
             if (!last) exit 1
             for (i = 1; i <= NR; i++) { print lines[i]; if (i == last) print entry }
         }' "$COMPOSE_FILE" > "$COMPOSE_FILE.tmp" \
-        || { rm -f "$COMPOSE_FILE.tmp"; echo "docker-compose.yml include listesi bulunamadı." >&2; exit 1; }
+        || { rm -f "$COMPOSE_FILE.tmp"; echo "The include list in docker-compose.yml was not found." >&2; exit 1; }
     mv "$COMPOSE_FILE.tmp" "$COMPOSE_FILE"
 done
 
 echo
-echo "Hazır: $SOLUTION_NAME/$SOLUTION_NAME.slnx"
+echo "Done: $SOLUTION_NAME/$SOLUTION_NAME.slnx"
 echo "  cd $SOLUTION_NAME && dotnet build && dotnet test"

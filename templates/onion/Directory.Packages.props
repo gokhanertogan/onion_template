@@ -9,7 +9,7 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <MicrosoftExtensionsVersion>10.0.14</MicrosoftExtensionsVersion>
     <AspNetCoreVersion>10.0.14</AspNetCoreVersion>
-    <EfCoreVersion>10.0.13</EfCoreVersion>
+    <EfCoreVersion>10.0.14</EfCoreVersion>
   </PropertyGroup>
 
   <ItemGroup Label="Microsoft.Extensions">

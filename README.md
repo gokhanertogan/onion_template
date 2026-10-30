@@ -1013,7 +1013,8 @@ git tag -a v1.1.0 -m "OnionArchitecture.Templates 1.1.0" && git push origin v1.1
 ```
 
 A tag push first runs `template-ci`; if it passes, the package is built with the tag's version (without the `v`) and
-pushed to NuGet.org, then a GitHub release with generated notes and the `.nupkg` is created. The only setting required is the `NUGET_API_KEY` secret of the `nuget` environment; adding a
-required reviewer to that environment in GitHub makes every release wait for manual approval. Pushing the same
+pushed to NuGet.org, then a GitHub release with generated notes and the `.nupkg` is created. Publishing uses NuGet Trusted Publishing
+(GitHub OIDC), so no API key is stored: the nuget.org trusted publishing policy must name this repository and
+`release.yml`. Adding a required reviewer to that environment in GitHub makes every release wait for manual approval. Pushing the same
 version again is skipped with `--skip-duplicate`. The `1.0.0` in `Onion.Templates.csproj` is only the default for
 local packs.

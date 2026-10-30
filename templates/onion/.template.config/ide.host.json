@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json.schemastore.org/ide.host",
+  "order": 0,
+  "icon": "icon.png",
+  "learnMoreLink": "https://github.com/gokhanertogan/onion_template",
+  "uiFilters": [ "oneaspnet" ],
+  "symbolInfo": [
+    {
+      "id": "Database",
+      "name": { "text": "Database provider" },
+      "isVisible": true
+    },
+    {
+      "id": "UseOpenTelemetry",
+      "name": { "text": "Enable OpenTelemetry (OTLP traces, metrics and logs)" },
+      "isVisible": true
+    },
+    {
+      "id": "ServiceOnly",
+      "name": { "text": "Only add a new service to an existing solution" },
+      "isVisible": true
+    },
+    {
+      "id": "SolutionName",
+      "isVisible": false
+    },
+    {
+      "id": "skipRestore",
+      "isVisible": false
+    }
+  ]
+}

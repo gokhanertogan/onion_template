@@ -1,8 +1,40 @@
-# Onion Template
+<p align="center"><img src="assets/icon.png" width="96" alt="Onion Template logo"></p>
 
-Onion Template is a `dotnet new` template that generates a production-ready .NET 10 microservice with a single
-command (`dotnet new onion -n Order`). The default output contains no third-party NuGet packages: the mediator,
-validation, result pattern, outbox and permission-based authorization are written inside the template.
+# Onion / Clean Architecture .NET 10 Microservice Template
+
+[![NuGet](https://img.shields.io/nuget/v/OnionArchitecture.Templates?logo=nuget&label=NuGet)](https://www.nuget.org/packages/OnionArchitecture.Templates)
+[![NuGet downloads](https://img.shields.io/nuget/dt/OnionArchitecture.Templates?label=downloads)](https://www.nuget.org/packages/OnionArchitecture.Templates)
+[![template-ci](https://github.com/gokhanertogan/onion_template/actions/workflows/template-ci.yml/badge.svg)](https://github.com/gokhanertogan/onion_template/actions/workflows/template-ci.yml)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+Onion Template is a `dotnet new` template that generates a production-ready **ASP.NET Core 10 Web API
+microservice** built on **Onion / Clean Architecture, DDD and CQRS** with a single command
+(`dotnet new onion -n Order`). The default output contains no third-party NuGet packages: the mediator (a MediatR
+alternative), validation (a FluentValidation alternative), result pattern, outbox and permission-based authorization
+are written inside the template.
+
+```bash
+dotnet new install OnionArchitecture.Templates
+dotnet new onion -n Order --database sqlite
+cd Order && dotnet test
+```
+
+After installation the template is also listed in the Visual Studio and JetBrains Rider "New Project" dialogs.
+
+### Why this template?
+
+| | Onion Template | Typical Clean Architecture template |
+| --- | --- | --- |
+| Third-party packages | None by default | MediatR, FluentValidation, AutoMapper, ... |
+| License risk (e.g. MediatR going commercial) | None | Depends on each package |
+| Shape | Microservice; add more services with `--service-only` | Usually a single monolith |
+| Outbox, idempotency, HybridCache | Built in | Usually not included |
+| Security defaults | JWT, permissions, rate limiting, security headers | Varies |
+| Architecture rules | Enforced by tests | Convention only |
+| Docker, compose, CI, Dependabot | Generated | Varies |
+
+If the template saves you time, please give the repository a ⭐: it is the main way other developers find it.
 
 This document is for developers who use and develop the template. Examples are based on a service generated
 with `-n Order`; the template source says `ServiceName` in the same places.
@@ -934,9 +966,10 @@ onion_template/
 │   ├── dependabot.yml       # This repository's actions and the template's package/image versions
 │   └── workflows/
 │       ├── template-ci.yml  # The template's own CI: pack + all variants + multiple services
-│       └── release.yml      # Publishes to NuGet.org on v* tags
+│       └── release.yml      # Publishes to NuGet.org and creates a GitHub release on v* tags
+├── assets/                  # Package icon and the short README shown on NuGet.org
 ├── templates/onion/         # The template itself: the exact source of the generated solution
-│   ├── .template.config/    # dotnet new definition (parameters, conditions, post-actions)
+│   ├── .template.config/    # dotnet new, Visual Studio (ide.host.json) and CLI host definitions
 │   └── .github/             # CI and Dependabot of the generated solution (not run in this repository)
 ├── Onion.Templates.csproj   # Packs templates/** into a NuGet template package
 ├── create_project.sh        # Creates a solution with several services in one command
@@ -980,7 +1013,7 @@ git tag -a v1.1.0 -m "OnionArchitecture.Templates 1.1.0" && git push origin v1.1
 ```
 
 A tag push first runs `template-ci`; if it passes, the package is built with the tag's version (without the `v`) and
-pushed to NuGet.org. The only setting required is the `NUGET_API_KEY` secret of the `nuget` environment; adding a
+pushed to NuGet.org, then a GitHub release with generated notes and the `.nupkg` is created. The only setting required is the `NUGET_API_KEY` secret of the `nuget` environment; adding a
 required reviewer to that environment in GitHub makes every release wait for manual approval. Pushing the same
 version again is skipped with `--skip-duplicate`. The `1.0.0` in `Onion.Templates.csproj` is only the default for
 local packs.
